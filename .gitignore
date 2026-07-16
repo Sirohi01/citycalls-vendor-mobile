@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local copy synced from citycalls-docs via scripts/sync-contracts.sh — the
+# canonical spec lives in citycalls-docs, this is a derived/regenerable
+# artifact, never committed here.
+/openapi/

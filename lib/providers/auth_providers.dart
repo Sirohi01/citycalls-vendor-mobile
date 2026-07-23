@@ -3,10 +3,12 @@ import '../data/api_client.dart';
 import '../data/auth_repository.dart';
 import '../models/auth_models.dart';
 
+// Compile-time override for staging/prod: flutter run/build
+// --dart-define=API_BASE_URL=https://api.citycalls.example/api/v1
+const _apiBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:4000/api/v1');
+
 final apiClientProvider = Provider<ApiClient>((ref) {
-  // TODO: read from environment/build config instead of hardcoding once
-  // multiple environments (staging/prod) are set up.
-  return ApiClient(baseUrl: 'http://localhost:4000/api/v1');
+  return ApiClient(baseUrl: _apiBaseUrl);
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {

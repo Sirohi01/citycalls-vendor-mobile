@@ -9,8 +9,11 @@ class ApiClient {
   final Dio dio;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  ApiClient({String baseUrl = 'http://localhost:4000/api/v1'})
-      : dio = Dio(BaseOptions(baseUrl: baseUrl, headers: {'Content-Type': 'application/json'})) {
+  ApiClient(
+      {String baseUrl =
+          'https://nenita-untoured-nonhesitantly.ngrok-free.dev/api/v1'})
+      : dio = Dio(BaseOptions(
+            baseUrl: baseUrl, headers: {'Content-Type': 'application/json'})) {
     dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         final token = await _storage.read(key: _accessTokenKey);
@@ -22,6 +25,8 @@ class ApiClient {
     ));
   }
 
-  Future<void> saveAccessToken(String token) => _storage.write(key: _accessTokenKey, value: token);
+  Future<void> saveAccessToken(String token) =>
+      _storage.write(key: _accessTokenKey, value: token);
   Future<void> clearAccessToken() => _storage.delete(key: _accessTokenKey);
+  Future<String?> readAccessToken() => _storage.read(key: _accessTokenKey);
 }

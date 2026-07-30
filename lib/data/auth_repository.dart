@@ -34,5 +34,10 @@ class AuthRepository {
     }
   }
 
+  Future<AuthUser> getMe() async {
+    final res = await _client.dio.get('/auth/me');
+    return AuthUser.fromMeJson(res.data['data'] as Map<String, dynamic>);
+  }
+
   Future<void> logout() => _client.clearAccessToken();
 }

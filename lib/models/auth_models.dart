@@ -18,6 +18,17 @@ class AuthUser {
     );
   }
 
+  // GET /auth/me returns the raw User document shape (`_id`, not `id`) —
+  // used to rehydrate the session on app restart, distinct from the login
+  // response's already-shaped `user` object.
+  factory AuthUser.fromMeJson(Map<String, dynamic> json) {
+    return AuthUser(
+      id: json['_id'] as String,
+      name: json['name'] as String,
+      role: json['role'] as String,
+    );
+  }
+
   // Per docs/manish/09-vendor-app-functional-plan.md §6: this app serves both
   // Employee and Vendor Technician roles from one binary.
   bool get isVendorRole => role.startsWith('VENDOR_');

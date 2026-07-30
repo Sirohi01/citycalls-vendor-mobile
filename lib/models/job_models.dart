@@ -5,6 +5,7 @@
 // no shared package between the two Flutter apps.
 
 const _statusLabels = {
+  'ASSIGNED_TO_EMPLOYEE': 'New — Awaiting Response',
   'ACCEPTED': 'Accepted',
   'APPOINTMENT_SCHEDULED': 'Appointment Scheduled',
   'RESCHEDULED': 'Rescheduled',
@@ -31,15 +32,19 @@ const _statusLabels = {
   'REASSIGNMENT_REQUIRED': 'Reassignment Required',
   'CANCELLED': 'Cancelled',
 };
-String jobStatusLabel(String status) => _statusLabels[status] ?? status.replaceAll('_', ' ');
-
-// A job still needs the technician's attention today — used by "My Jobs" to
-// separate the active route from history, mirroring which statuses this
-// app's execution flow (not yet built) will actually act on.
+String jobStatusLabel(String status) =>
+    _statusLabels[status] ?? status.replaceAll('_', ' ');
 const _completedJobStatuses = {
-  'SERVICE_COMPLETED', 'CUSTOMER_CONFIRMATION_PENDING', 'PAYMENT_PENDING', 'PARTIALLY_PAID', 'PAID', 'CLOSED', 'CANCELLED',
+  'SERVICE_COMPLETED',
+  'CUSTOMER_CONFIRMATION_PENDING',
+  'PAYMENT_PENDING',
+  'PARTIALLY_PAID',
+  'PAID',
+  'CLOSED',
+  'CANCELLED',
 };
-bool isCompletedJobStatus(String status) => _completedJobStatuses.contains(status);
+bool isCompletedJobStatus(String status) =>
+    _completedJobStatuses.contains(status);
 
 class JobSummary {
   final String id;
@@ -82,9 +87,33 @@ class JobSummary {
       customerName: customer?['name'] as String?,
       customerMobile: customer?['mobile'] as String?,
       city: address?['city'] as String? ?? '',
-      scheduledDate: json['scheduledDate'] != null ? DateTime.tryParse(json['scheduledDate'] as String) : null,
+      scheduledDate: json['scheduledDate'] != null
+          ? DateTime.tryParse(json['scheduledDate'] as String)
+          : null,
       scheduledSlot: json['scheduledSlot'] as String?,
-      slaDueAt: sla?['dueAt'] != null ? DateTime.tryParse(sla!['dueAt'] as String) : null,
+      slaDueAt: sla?['dueAt'] != null
+          ? DateTime.tryParse(sla!['dueAt'] as String)
+          : null,
+    );
+  }
+}
+
+class CustomerProductInfo {
+  final String? brand;
+  final String? productType;
+  final String? modelNumber;
+  final DateTime? warrantyExpiresAt;
+
+  CustomerProductInfo({this.brand, this.productType, this.modelNumber, this.warrantyExpiresAt});
+
+  bool get isUnderWarranty => warrantyExpiresAt != null && warrantyExpiresAt!.isAfter(DateTime.now());
+
+  factory CustomerProductInfo.fromJson(Map<String, dynamic> json) {
+    return CustomerProductInfo(
+      brand: json['brand'] as String?,
+      productType: json['productType'] as String?,
+      modelNumber: json['modelNumber'] as String?,
+      warrantyExpiresAt: json['warrantyExpiresAt'] != null ? DateTime.tryParse(json['warrantyExpiresAt'] as String) : null,
     );
   }
 }
@@ -104,6 +133,7 @@ class JobDetail {
   final DateTime? scheduledDate;
   final String? scheduledSlot;
   final DateTime? slaDueAt;
+  final CustomerProductInfo? product;
 
   JobDetail({
     required this.id,
@@ -120,6 +150,7 @@ class JobDetail {
     this.scheduledDate,
     this.scheduledSlot,
     this.slaDueAt,
+    this.product,
   });
 
   factory JobDetail.fromJson(Map<String, dynamic> json) {
@@ -127,9 +158,15 @@ class JobDetail {
     final service = json['service'] as Map<String, dynamic>?;
     final address = json['addressSnapshot'] as Map<String, dynamic>?;
     final sla = json['sla'] as Map<String, dynamic>?;
-    final addressParts = [address?['line1'], address?['line2'], address?['landmark'], address?['city'], address?['state'], address?['pinCode']]
-        .where((s) => s != null && (s as String).isNotEmpty)
-        .join(', ');
+    final product = json['customerProduct'] as Map<String, dynamic>?;
+    final addressParts = [
+      address?['line1'],
+      address?['line2'],
+      address?['landmark'],
+      address?['city'],
+      address?['state'],
+      address?['pinCode']
+    ].where((s) => s != null && (s as String).isNotEmpty).join(', ');
     return JobDetail(
       id: json['_id'] as String,
       number: json['number'] as String,
@@ -142,9 +179,14 @@ class JobDetail {
       symptoms: (json['symptoms'] as List? ?? []).cast<String>(),
       notes: json['notes'] as String?,
       images: (json['images'] as List? ?? []).cast<String>(),
-      scheduledDate: json['scheduledDate'] != null ? DateTime.tryParse(json['scheduledDate'] as String) : null,
+      scheduledDate: json['scheduledDate'] != null
+          ? DateTime.tryParse(json['scheduledDate'] as String)
+          : null,
       scheduledSlot: json['scheduledSlot'] as String?,
-      slaDueAt: sla?['dueAt'] != null ? DateTime.tryParse(sla!['dueAt'] as String) : null,
+      slaDueAt: sla?['dueAt'] != null
+          ? DateTime.tryParse(sla!['dueAt'] as String)
+          : null,
+      product: product != null ? CustomerProductInfo.fromJson(product) : null,
     );
   }
 }

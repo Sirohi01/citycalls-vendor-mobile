@@ -113,7 +113,7 @@ class AppTheme {
 // codebase (see JobSummary) — this maps a status to the urgency color used
 // throughout Job cards/badges, not to a human label.
 Color statusAccentColor(String status) {
-  const urgentStatuses = {'CUSTOMER_UNAVAILABLE', 'REASSIGNMENT_REQUIRED', 'ON_HOLD'};
+  const urgentStatuses = {'ASSIGNED_TO_EMPLOYEE', 'CUSTOMER_UNAVAILABLE', 'REASSIGNMENT_REQUIRED', 'ON_HOLD'};
   const completedStatuses = {'SERVICE_COMPLETED', 'CUSTOMER_CONFIRMATION_PENDING', 'PAID', 'CLOSED'};
   const activeStatuses = {
     'ACCEPTED', 'APPOINTMENT_SCHEDULED', 'RESCHEDULED', 'TECHNICIAN_EN_ROUTE', 'TECHNICIAN_ARRIVED',

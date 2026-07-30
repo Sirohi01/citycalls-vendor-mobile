@@ -65,6 +65,24 @@ class ProfileScreen extends ConsumerWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: glassCardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Work Assignment', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                    const SizedBox(height: 12),
+                    _InfoRow(icon: Icons.store_outlined, label: 'Branch', value: p.branchName ?? 'Not assigned'),
+                    if (p.subBranchName != null) ...[const SizedBox(height: 10), _InfoRow(icon: Icons.account_tree_outlined, label: 'Sub-Branch', value: p.subBranchName!)],
+                    if (p.teamName != null) ...[const SizedBox(height: 10), _InfoRow(icon: Icons.groups_outlined, label: 'Team', value: p.teamName!)],
+                    const SizedBox(height: 10),
+                    _InfoRow(icon: Icons.event_available_outlined, label: 'Daily Job Capacity', value: '${p.dailyCapacity} jobs/day'),
+                  ],
+                ),
+              ),
               if (p.skills.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Container(
@@ -84,6 +102,66 @@ class ProfileScreen extends ConsumerWidget {
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(20)),
                                   child: Text(s, style: const TextStyle(fontSize: 12, color: AppColors.primaryDark, fontWeight: FontWeight.w600)),
+                                ))
+                            .toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (p.certifications.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: glassCardDecoration(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Certifications', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: p.certifications
+                            .map((c) => Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
+                                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                    const Icon(Icons.verified_outlined, size: 13, color: AppColors.success),
+                                    const SizedBox(width: 4),
+                                    Text(c, style: const TextStyle(fontSize: 12, color: AppColors.success, fontWeight: FontWeight.w600)),
+                                  ]),
+                                ))
+                            .toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (p.availability.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: glassCardDecoration(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Working Days', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                      const SizedBox(height: 12),
+                      Column(
+                        children: (p.availability..sort((a, b) => a.day.compareTo(b.day)))
+                            .map((a) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: Text(a.label, style: const TextStyle(fontSize: 13))),
+                                      Icon(a.available ? Icons.check_circle : Icons.remove_circle_outline, size: 18, color: a.available ? AppColors.success : AppColors.slate400),
+                                      const SizedBox(width: 6),
+                                      Text(a.available ? 'Working' : 'Off', style: TextStyle(fontSize: 12, color: a.available ? AppColors.success : AppColors.slate500, fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
                                 ))
                             .toList(),
                       ),
@@ -138,5 +216,25 @@ class ProfileScreen extends ConsumerWidget {
     if (context.mounted) {
       Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const OtpRequestScreen()), (route) => false);
     }
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _InfoRow({required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 17, color: AppColors.slate500),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(fontSize: 13, color: AppColors.slate500)),
+        const Spacer(),
+        Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      ],
+    );
   }
 }

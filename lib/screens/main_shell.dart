@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dashboard_screen.dart';
 import 'my_jobs_screen.dart';
 import 'job_history_screen.dart';
 import 'profile_screen.dart';
@@ -17,7 +18,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
 
-  static const _screens = [MyJobsScreen(), JobHistoryScreen(), ProfileScreen()];
+  static const _screens = [DashboardScreen(), MyJobsScreen(), JobHistoryScreen(), ProfileScreen()];
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +28,7 @@ class _MainShellState extends State<MainShell> {
         currentIndex: _index,
         onTap: (i) => setState(() => _index = i),
         items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), activeIcon: Icon(Icons.dashboard), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.work_outline), activeIcon: Icon(Icons.work), label: 'My Jobs'),
           BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
           BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'Profile'),
@@ -35,7 +37,3 @@ class _MainShellState extends State<MainShell> {
     );
   }
 }
-
-// Unused import guard note: AppColors isn't referenced directly in this file
-// but keeping app_theme.dart imported here is intentional — every screen in
-// _screens relies on it being initialized first via MaterialApp's theme.

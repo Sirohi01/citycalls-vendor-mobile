@@ -2,35 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:citycalls_vendor/screens/login_screen.dart';
-import 'package:citycalls_vendor/theme/app_theme.dart';
-
-// Pumps the login screen directly rather than through
-// CityCallsVendorApp/SplashScreen — the splash makes a real network/secure-
-// storage call (session restore) and its spinner runs an indeterminate
-// animation, which leaves pumpAndSettle waiting on scheduled frames forever
-// in a widget test (same pattern as citycalls-customer-mobile's widget_test.dart).
-Widget _wrapped(Widget child) => ProviderScope(
-      child: MaterialApp(theme: AppTheme.light(), home: child),
-    );
+import 'package:citycalls_vendor/screens/otp_request_screen.dart';
 
 void main() {
-  testWidgets('App boots to the login screen with required fields', (WidgetTester tester) async {
-    await tester.pumpWidget(_wrapped(const LoginScreen()));
+  // Pumps the OTP-request screen directly (wrapped in a bare ProviderScope)
+  // rather than through CityCallsVendorApp/SplashScreen — the splash makes a
+  // real session-restore call and its spinner animates indefinitely, which
+  // leaves pumpAndSettle waiting on scheduled frames forever in a widget
+  // test (same pattern as citycalls-customer-mobile's widget_test.dart).
+  testWidgets('Shows the mobile-number entry screen', (WidgetTester tester) async {
+    await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: OtpRequestScreen())));
 
-    expect(find.text('CityCalls Field'), findsOneWidget);
-    expect(find.widgetWithText(TextFormField, 'Mobile number or email'), findsOneWidget);
-    expect(find.widgetWithText(TextFormField, 'Password'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Sign In'), findsOneWidget);
+    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Mobile number'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Send OTP'), findsOneWidget);
   });
 
-  testWidgets('Shows validation errors when submitting an empty form', (WidgetTester tester) async {
-    await tester.pumpWidget(_wrapped(const LoginScreen()));
+  testWidgets('Shows a validation error for an invalid mobile number', (WidgetTester tester) async {
+    await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: OtpRequestScreen())));
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Sign In'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Send OTP'));
     await tester.pump();
 
-    expect(find.text('Enter a valid mobile or email'), findsOneWidget);
-    expect(find.text('Password is required'), findsOneWidget);
+    expect(find.text('Enter a valid 10-digit mobile number'), findsOneWidget);
   });
 }

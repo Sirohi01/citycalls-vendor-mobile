@@ -14,15 +14,20 @@ class AppColors {
   static const primary = Color(0xFF0F766E); // teal-700
   static const primaryDark = Color(0xFF0B4F49);
   static const primaryLight = Color(0xFFCCFBF1); // teal-100
+  static const teal400 = Color(0xFF2DD4BF);
+  static const cyan400 = Color(0xFF22D3EE);
 
   static const black = Color(0xFF0F172A); // slate-900
+  static const slate950 = Color(0xFF020617);
   static const slate900 = Color(0xFF0F172A);
   static const slate700 = Color(0xFF334155);
   static const slate500 = Color(0xFF64748B);
   static const slate400 = Color(0xFF94A3B8);
+  static const slate300 = Color(0xFFCBD5E1);
   static const slate200 = Color(0xFFE2E8F0);
   static const slate100 = Color(0xFFF1F5F9);
   static const white = Color(0xFFFFFFFF);
+  static const red400 = Color(0xFFF87171);
 
   // Job-status/urgency signaling — a field app lives and dies by "what needs
   // my attention right now," so these get real color weight, not just text.
@@ -120,4 +125,47 @@ Color statusAccentColor(String status) {
   if (completedStatuses.contains(status)) return AppColors.success;
   if (activeStatuses.contains(status)) return AppColors.info;
   return AppColors.slate500;
+}
+
+// Shared field styling for the dark glass auth card — outlined, translucent,
+// teal focus ring. Mirrors citycalls-customer-mobile's widgets/auth_background.dart
+// pattern (independently defined, no shared code between the two apps).
+InputDecoration authFieldDecoration({required String label, IconData? icon, String? prefixText, String? errorText}) {
+  return InputDecoration(
+    labelText: label,
+    labelStyle: const TextStyle(color: AppColors.slate300),
+    prefixIcon: icon != null ? Icon(icon, color: AppColors.slate400, size: 20) : null,
+    prefixText: prefixText,
+    prefixStyle: const TextStyle(color: AppColors.slate200),
+    errorText: errorText,
+    errorStyle: const TextStyle(color: AppColors.red400),
+    filled: true,
+    fillColor: Colors.white.withValues(alpha: 0.05),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.teal400, width: 1.5)),
+    errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.red400)),
+  );
+}
+
+ButtonStyle authButtonStyle() {
+  return FilledButton.styleFrom(
+    backgroundColor: AppColors.teal400,
+    foregroundColor: AppColors.slate950,
+    minimumSize: const Size.fromHeight(48),
+    textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+  );
+}
+
+// Frosted-glass card background — used across Dashboard/My Jobs/Job Detail/
+// Profile for a consistent premium look on top of the app's slate-100
+// scaffold, distinct from the flat white Material cards used elsewhere.
+BoxDecoration glassCardDecoration({double radius = 18}) {
+  return BoxDecoration(
+    color: Colors.white.withValues(alpha: 0.7),
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
+    boxShadow: [BoxShadow(color: AppColors.slate900.withValues(alpha: 0.06), blurRadius: 20, offset: const Offset(0, 8))],
+  );
 }

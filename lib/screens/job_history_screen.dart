@@ -62,37 +62,37 @@ class _HistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = statusAccentColor(job.status);
-    return Material(
-      color: AppColors.white,
-      borderRadius: BorderRadius.circular(14),
-      elevation: 1,
-      shadowColor: Colors.black.withValues(alpha: 0.05),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => JobDetailScreen(jobId: job.id))),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: accent.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: Icon(Icons.check, color: accent, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(job.serviceName ?? 'Service Request', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                    const SizedBox(height: 2),
-                    Text('#${job.number} • ${job.customerName ?? ''}', style: const TextStyle(color: AppColors.slate500, fontSize: 12), overflow: TextOverflow.ellipsis),
-                  ],
+    return Container(
+      decoration: glassCardDecoration(),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => JobDetailScreen(jobId: job.id))),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), shape: BoxShape.circle),
+                  child: Icon(Icons.check, color: accent, size: 20),
                 ),
-              ),
-              Text(jobStatusLabel(job.status), style: TextStyle(color: accent, fontSize: 11.5, fontWeight: FontWeight.w600)),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(job.serviceName ?? 'Service Request', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      const SizedBox(height: 2),
+                      Text('#${job.number} • ${job.customerName ?? ''}', style: const TextStyle(color: AppColors.slate500, fontSize: 12), overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                Text(jobStatusLabel(job.status), style: TextStyle(color: accent, fontSize: 11.5, fontWeight: FontWeight.w600)),
+              ],
+            ),
           ),
         ),
       ),

@@ -6,8 +6,7 @@ import '../models/auth_models.dart';
 // Compile-time override for staging/prod: flutter run/build
 // --dart-define=API_BASE_URL=https://api.citycalls.example/api/v1
 const _apiBaseUrl = String.fromEnvironment('API_BASE_URL',
-    defaultValue:
-        'https://nenita-untoured-nonhesitantly.ngrok-free.dev/api/v1');
+    defaultValue: 'https://nenita-untoured-nonhesitantly.ngrok-free.dev/api/v1');
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(baseUrl: _apiBaseUrl);
@@ -17,28 +16,41 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(ref.watch(apiClientProvider));
 });
 
+// Only these roles have the Employee record + scoping this app is actually
+// built against ('/employees/me', assigneeType EMPLOYEE) — VENDOR_OWNER/
+// VENDOR_MANAGER/VENDOR_TECHNICIAN exist as roles in the backend (outsourced
+// partners, keyed off VendorModel not EmployeeModel) but nothing in this app
+// resolves a Vendor's own profile/jobs yet, so they're deliberately rejected
+// here with a clear message rather than silently landing in a broken app.
+const _supportedRoles = {'EMPLOYEE', 'TECHNICIAN'};
+
+enum AuthStep { enterMobile, otpSent, loggedIn }
+
 class AuthState {
+  final AuthStep step;
   final bool isLoading;
   final String? errorMessage;
+  final String? mobile;
   final AuthUser? user;
   // Splash waits on this before deciding Login vs MainShell — distinct from
-  // isLoading, which only covers an in-flight login submission.
+  // isLoading, which only covers an in-flight OTP submission.
   final bool sessionChecked;
 
-  const AuthState(
-      {this.isLoading = false,
-      this.errorMessage,
-      this.user,
-      this.sessionChecked = false});
+  const AuthState({
+    this.step = AuthStep.enterMobile,
+    this.isLoading = false,
+    this.errorMessage,
+    this.mobile,
+    this.user,
+    this.sessionChecked = false,
+  });
 
-  AuthState copyWith(
-      {bool? isLoading,
-      String? errorMessage,
-      AuthUser? user,
-      bool? sessionChecked}) {
+  AuthState copyWith({AuthStep? step, bool? isLoading, String? errorMessage, String? mobile, AuthUser? user, bool? sessionChecked}) {
     return AuthState(
+      step: step ?? this.step,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
+      mobile: mobile ?? this.mobile,
       user: user ?? this.user,
       sessionChecked: sessionChecked ?? this.sessionChecked,
     );
@@ -50,16 +62,42 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final ApiClient _client;
   AuthNotifier(this._repository, this._client) : super(const AuthState());
 
-  Future<void> login(String identifier, String password) async {
+  Future<void> requestOtp(String mobile) async {
+    state = state.copyWith(isLoading: true, errorMessage: null, mobile: mobile);
+    try {
+      await _repository.requestOtp(mobile);
+      state = state.copyWith(isLoading: false, step: AuthStep.otpSent);
+    } on AuthException catch (e) {
+      state = state.copyWith(isLoading: false, errorMessage: e.message);
+    } catch (_) {
+      state = state.copyWith(isLoading: false, errorMessage: 'Failed to connect to the server.');
+    }
+  }
+
+  Future<void> verifyOtp(String otp) async {
+    final mobile = state.mobile;
+    if (mobile == null) return;
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
-      final result = await _repository.login(identifier, password);
-      state = state.copyWith(
-          isLoading: false, user: result.user, sessionChecked: true);
+      final result = await _repository.verifyOtp(mobile, otp);
+      if (!_supportedRoles.contains(result.user.role)) {
+        await _client.clearAccessToken();
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: 'This number isn\'t registered as a technician. Contact your admin.',
+        );
+        return;
+      }
+      state = state.copyWith(isLoading: false, step: AuthStep.loggedIn, user: result.user, sessionChecked: true);
     } on AuthException catch (e) {
-      state = AuthState(
-          isLoading: false, errorMessage: e.message, sessionChecked: true);
+      state = state.copyWith(isLoading: false, errorMessage: e.message);
+    } catch (_) {
+      state = state.copyWith(isLoading: false, errorMessage: 'Failed to connect to the server.');
     }
+  }
+
+  void backToMobileEntry() {
+    state = state.copyWith(step: AuthStep.enterMobile, errorMessage: null);
   }
 
   // Called once from the splash screen — a stored token doesn't prove it's
@@ -73,7 +111,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
       final user = await _repository.getMe();
-      state = state.copyWith(user: user, sessionChecked: true);
+      if (!_supportedRoles.contains(user.role)) {
+        await _client.clearAccessToken();
+        state = state.copyWith(sessionChecked: true);
+        return;
+      }
+      state = state.copyWith(user: user, step: AuthStep.loggedIn, sessionChecked: true);
     } catch (_) {
       // Covers both "session invalid/expired" (clear it) and "secure storage
       // itself unavailable" (e.g. no platform channel in a widget test) —
@@ -91,6 +134,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(
-      ref.watch(authRepositoryProvider), ref.watch(apiClientProvider));
+  return AuthNotifier(ref.watch(authRepositoryProvider), ref.watch(apiClientProvider));
 });

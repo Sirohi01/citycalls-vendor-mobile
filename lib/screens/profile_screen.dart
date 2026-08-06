@@ -4,6 +4,7 @@ import '../models/employee_models.dart';
 import '../providers/auth_providers.dart';
 import '../providers/employee_providers.dart';
 import '../providers/push_providers.dart';
+import '../providers/theme_provider.dart';
 import '../theme/app_theme.dart';
 import 'otp_request_screen.dart';
 import 'sync_status_screen.dart';
@@ -135,6 +136,8 @@ class ProfileScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               _AvailabilitySection(availability: p.availability),
               const SizedBox(height: 16),
+              const _AppearanceSection(),
+              const SizedBox(height: 16),
               GlassCard(
                 padding: EdgeInsets.zero,
                 child: ListTile(
@@ -201,6 +204,45 @@ class ProfileScreen extends ConsumerWidget {
 // the background via PATCH /employees/me/availability, and reverts with an
 // error message if that save fails — never leaves the switch silently out
 // of sync with what's actually persisted.
+class _AppearanceSection extends ConsumerWidget {
+  const _AppearanceSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedMode = ref.watch(themeModeProvider);
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.brightness_6_outlined, size: 19),
+              SizedBox(width: 8),
+              Text('Appearance', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text('Choose how CityCalls Field looks on this device.', style: TextStyle(fontSize: 11.5, color: AppColors.slate500)),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.settings_suggest_outlined, size: 17), label: Text('System')),
+                ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_outlined, size: 17), label: Text('Light')),
+                ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_outlined, size: 17), label: Text('Dark')),
+              ],
+              selected: {selectedMode},
+              showSelectedIcon: false,
+              onSelectionChanged: (selection) => ref.read(themeModeProvider.notifier).setMode(selection.first),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AvailabilitySection extends ConsumerStatefulWidget {
   final List<AvailabilityDay> availability;
   const _AvailabilitySection({required this.availability});

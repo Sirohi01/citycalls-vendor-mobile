@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/splash_screen.dart';
 import 'theme/app_theme.dart';
+import 'providers/theme_provider.dart';
 
 @pragma('vm-entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
@@ -28,17 +29,17 @@ void main() async {
   runApp(const ProviderScope(child: CityCallsVendorApp()));
 }
 
-class CityCallsVendorApp extends StatelessWidget {
+class CityCallsVendorApp extends ConsumerWidget {
   const CityCallsVendorApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
       title: 'CityCalls Field',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system,
+      themeMode: ref.watch(themeModeProvider),
       home: const SplashScreen(),
     );
   }

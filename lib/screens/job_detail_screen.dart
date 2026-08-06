@@ -367,7 +367,7 @@ class _JobDetailBody extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              Text('#${job.number}', style: const TextStyle(color: AppColors.slate500, fontSize: 12.5)),
+              Text('#${job.number}', style: TextStyle(color: secondaryTextColor(context), fontSize: 12.5)),
               if (job.scheduledDate != null) ...[
                 const SizedBox(height: 12),
                 Row(
@@ -462,14 +462,14 @@ class _JobDetailBody extends StatelessWidget {
                     children: job.symptoms
                         .map((s) => Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(color: AppColors.slate100, borderRadius: BorderRadius.circular(20)),
+                              decoration: BoxDecoration(color: subtleSurfaceColor(context), borderRadius: BorderRadius.circular(20)),
                               child: Text(s, style: const TextStyle(fontSize: 12.5)),
                             ))
                         .toList(),
                   ),
                 if (job.notes?.isNotEmpty ?? false) ...[
                   const SizedBox(height: 10),
-                  Text(job.notes!, style: const TextStyle(color: AppColors.slate700, height: 1.4)),
+                  Text(job.notes!, style: TextStyle(color: strongSecondaryTextColor(context), height: 1.4)),
                 ],
               ],
             ),
@@ -492,7 +492,7 @@ class _JobDetailBody extends StatelessWidget {
                     itemBuilder: (context, i) => ClipRRect(
                       borderRadius: BorderRadius.circular(10),
                       child: Image.network(job.images[i], width: 84, height: 84, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(width: 84, height: 84, color: AppColors.slate100, child: const Icon(Icons.broken_image_outlined, color: AppColors.slate400))),
+                          errorBuilder: (_, __, ___) => Container(width: 84, height: 84, color: subtleSurfaceColor(context), child: const Icon(Icons.broken_image_outlined, color: AppColors.slate400))),
                     ),
                   ),
                 ),

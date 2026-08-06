@@ -199,6 +199,15 @@ Color statusAccentColor(String status) {
   return AppColors.slate500;
 }
 
+Color secondaryTextColor(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark ? AppColors.slate300 : AppColors.slate500;
+
+Color strongSecondaryTextColor(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark ? AppColors.slate200 : AppColors.slate700;
+
+Color subtleSurfaceColor(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark ? AppColors.slate700.withValues(alpha: 0.55) : AppColors.slate100;
+
 // Shared field styling for the dark glass auth card — outlined, translucent,
 // teal focus ring. Mirrors citycalls-customer-mobile's widgets/auth_background.dart
 // pattern (independently defined, no shared code between the two apps).

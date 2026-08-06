@@ -57,7 +57,7 @@ class ProfileScreen extends ConsumerWidget {
                     Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                     if (p.mobile != null) ...[
                       const SizedBox(height: 3),
-                      Text(p.mobile!, style: const TextStyle(color: AppColors.slate500, fontSize: 13)),
+                      Text(p.mobile!, style: TextStyle(color: secondaryTextColor(context), fontSize: 13)),
                     ],
                     const SizedBox(height: 10),
                     Container(
@@ -97,8 +97,8 @@ class ProfileScreen extends ConsumerWidget {
                         children: p.skills
                             .map((s) => Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(20)),
-                                  child: Text(s, style: const TextStyle(fontSize: 12, color: AppColors.primaryDark, fontWeight: FontWeight.w600)),
+                                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer, borderRadius: BorderRadius.circular(20)),
+                                  child: Text(s, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onPrimaryContainer, fontWeight: FontWeight.w600)),
                                 ))
                             .toList(),
                       ),
@@ -222,7 +222,7 @@ class _AppearanceSection extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 6),
-          const Text('Choose how CityCalls Field looks on this device.', style: TextStyle(fontSize: 11.5, color: AppColors.slate500)),
+          Text('Choose how CityCalls Field looks on this device.', style: TextStyle(fontSize: 11.5, color: secondaryTextColor(context))),
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
@@ -318,7 +318,7 @@ class _AvailabilitySectionState extends ConsumerState<_AvailabilitySection> {
                       padding: const EdgeInsets.only(top: 4),
                       child: Row(
                         children: [
-                          Expanded(child: Text(a.label, style: TextStyle(fontSize: 13, color: a.available ? AppColors.slate900 : AppColors.slate500))),
+                          Expanded(child: Text(a.label, style: TextStyle(fontSize: 13, color: a.available ? Theme.of(context).colorScheme.onSurface : secondaryTextColor(context)))),
                           Switch(
                             value: a.available,
                             activeTrackColor: AppColors.primary,
@@ -346,9 +346,9 @@ class _InfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 17, color: AppColors.slate500),
+        Icon(icon, size: 17, color: secondaryTextColor(context)),
         const SizedBox(width: 8),
-        Text(label, style: const TextStyle(fontSize: 13, color: AppColors.slate500)),
+        Text(label, style: TextStyle(fontSize: 13, color: secondaryTextColor(context))),
         const Spacer(),
         Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
       ],

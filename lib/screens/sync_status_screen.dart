@@ -89,7 +89,7 @@ class SyncStatusScreen extends ConsumerWidget {
                   Text('Job #${a.jobId.substring(a.jobId.length - 6)}', style: const TextStyle(fontSize: 11.5, color: AppColors.slate500)),
                   if (a.resultMessage != null) ...[
                     const SizedBox(height: 6),
-                    Text(a.resultMessage!, style: TextStyle(fontSize: 12, color: a.status == 'REJECTED' ? AppColors.urgent : AppColors.slate700)),
+                    Text(a.resultMessage!, style: TextStyle(fontSize: 12, color: a.status == 'REJECTED' ? AppColors.urgent : strongSecondaryTextColor(context))),
                   ],
                   if (a.status == 'REJECTED') ...[
                     const SizedBox(height: 10),

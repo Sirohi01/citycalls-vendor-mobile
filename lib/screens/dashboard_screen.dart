@@ -91,7 +91,7 @@ class DashboardScreen extends ConsumerWidget {
                                   fontWeight: FontWeight.w600,
                                   color: rejected > 0
                                       ? AppColors.urgent
-                                      : AppColors.slate700),
+                                      : strongSecondaryTextColor(context)),
                             ),
                           ),
                           const Icon(Icons.chevron_right,
@@ -392,10 +392,10 @@ class _BranchStrip extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
                 child: Text(parts.join(' • '),
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.slate700))),
+                        color: strongSecondaryTextColor(context)))),
           ],
         ),
       ),

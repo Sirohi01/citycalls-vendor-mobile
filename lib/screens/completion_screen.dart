@@ -127,15 +127,15 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
             decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(14)),
-            child: const Row(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline, color: AppColors.primary, size: 20),
-                SizedBox(width: 10),
+                const Icon(Icons.info_outline, color: AppColors.primary, size: 20),
+                const SizedBox(width: 10),
                 Expanded(
                     child: Text(
                         'Ask the customer for the OTP sent to their phone to confirm the work is done to their satisfaction.',
-                        style: TextStyle(color: AppColors.slate700))),
+                        style: TextStyle(color: strongSecondaryTextColor(context)))),
               ],
             ),
           ),
@@ -189,8 +189,8 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
           Center(
             child: TextButton(
               onPressed: _submitting ? null : _completeWithoutOtp,
-              child: const Text('Customer unreachable — complete without OTP',
-                  style: TextStyle(color: AppColors.slate500, fontSize: 12.5)),
+              child: Text('Customer unreachable — complete without OTP',
+                  style: TextStyle(color: secondaryTextColor(context), fontSize: 12.5)),
             ),
           ),
         ],

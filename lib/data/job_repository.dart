@@ -124,7 +124,15 @@ class JobRepository {
   }
 
   Future<void> verifyCompletionOtp(String id, String otp) async {
-    await _client.dio.post('/service-requests/$id/completion-otp/verify', data: {'otp': otp});
+    try {
+      await _client.dio.post('/service-requests/$id/completion-otp/verify', data: {'otp': otp});
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      if (body is Map<String, dynamic> && body['message'] is String) {
+        throw SyncRejectedException(body['message'] as String);
+      }
+      rethrow;
+    }
   }
 
   // Same signed-upload -> Cloudinary -> confirm flow as

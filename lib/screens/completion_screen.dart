@@ -59,7 +59,7 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
       final otp = _otpController.text.trim();
       await repo.verifyCompletionOtp(widget.jobId, otp);
       await repo.completeVisit(widget.jobId, proofType: 'OTP', value: otp);
-      await repo.changeStatus(widget.jobId, 'SERVICE_COMPLETED');
+      await _markServiceCompleted();
       ref.invalidate(jobDetailProvider(widget.jobId));
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -74,10 +74,15 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Complete without customer OTP?'),
-        content: const Text('Use this only if the customer\'s phone is unreachable. This is recorded as an app-only confirmation, not a customer-verified one.'),
+        content: const Text(
+            'Use this only if the customer\'s phone is unreachable. This is recorded as an app-only confirmation, not a customer-verified one.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Complete Anyway')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Complete Anyway')),
         ],
       ),
     );
@@ -90,7 +95,7 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
     try {
       final repo = ref.read(jobRepositoryProvider);
       await repo.completeVisit(widget.jobId, proofType: 'APP_CONFIRMATION');
-      await repo.changeStatus(widget.jobId, 'SERVICE_COMPLETED');
+      await _markServiceCompleted();
       ref.invalidate(jobDetailProvider(widget.jobId));
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -98,6 +103,15 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Future<void> _markServiceCompleted() async {
+    final repo = ref.read(jobRepositoryProvider);
+    final job = await repo.getJob(widget.jobId);
+    if (job.status == 'WORK_STARTED') {
+      await repo.changeStatus(widget.jobId, 'WORK_IN_PROGRESS');
+    }
+    await repo.changeStatus(widget.jobId, 'SERVICE_COMPLETED');
   }
 
   @override
@@ -110,13 +124,18 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(14)),
+            decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(14)),
             child: const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.info_outline, color: AppColors.primary, size: 20),
                 SizedBox(width: 10),
-                Expanded(child: Text('Ask the customer for the OTP sent to their phone to confirm the work is done to their satisfaction.', style: TextStyle(color: AppColors.slate700))),
+                Expanded(
+                    child: Text(
+                        'Ask the customer for the OTP sent to their phone to confirm the work is done to their satisfaction.',
+                        style: TextStyle(color: AppColors.slate700))),
               ],
             ),
           ),
@@ -125,36 +144,53 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
             FilledButton.icon(
               onPressed: _requestingOtp ? null : _requestOtp,
               icon: _requestingOtp
-                  ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.sms_outlined, size: 18),
               label: const Text('Send OTP to Customer'),
             )
           else ...[
-            const Text('6-digit OTP', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+            const Text('6-digit OTP',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
             const SizedBox(height: 8),
             TextField(
               controller: _otpController,
               keyboardType: TextInputType.number,
               maxLength: 6,
               style: const TextStyle(letterSpacing: 4, fontSize: 18),
-              decoration: const InputDecoration(hintText: '••••••', counterText: ''),
+              decoration:
+                  const InputDecoration(hintText: '••••••', counterText: ''),
             ),
             const SizedBox(height: 12),
-            TextButton(onPressed: _requestingOtp ? null : _requestOtp, child: const Text('Resend OTP')),
+            TextButton(
+                onPressed: _requestingOtp ? null : _requestOtp,
+                child: const Text('Resend OTP')),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: _submitting ? null : _completeWithOtp,
               child: _submitting
-                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Text('Verify & Complete'),
             ),
           ],
-          if (_error != null) Padding(padding: const EdgeInsets.only(top: 14), child: Text(_error!, style: const TextStyle(color: AppColors.urgent))),
+          if (_error != null)
+            Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: Text(_error!,
+                    style: const TextStyle(color: AppColors.urgent))),
           const SizedBox(height: 20),
           Center(
             child: TextButton(
               onPressed: _submitting ? null : _completeWithoutOtp,
-              child: const Text('Customer unreachable — complete without OTP', style: TextStyle(color: AppColors.slate500, fontSize: 12.5)),
+              child: const Text('Customer unreachable — complete without OTP',
+                  style: TextStyle(color: AppColors.slate500, fontSize: 12.5)),
             ),
           ),
         ],

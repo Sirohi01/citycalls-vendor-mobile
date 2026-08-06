@@ -33,7 +33,7 @@ class AuthRepository {
     try {
       final res = await _client.dio.post('/auth/otp/verify', data: {'mobile': mobile, 'otp': otp});
       final loginResponse = LoginResponse.fromJson(res.data['data'] as Map<String, dynamic>);
-      await _client.saveAccessToken(loginResponse.accessToken);
+      await _client.saveTokens(loginResponse.accessToken, loginResponse.refreshToken);
       return loginResponse;
     } on DioException catch (e) {
       throw _toAuthException(e, 'Incorrect or expired OTP.');

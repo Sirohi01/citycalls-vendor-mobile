@@ -2,15 +2,40 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'api_client.dart';
 import '../models/job_models.dart';
+import '../sync/sync_repository.dart';
+import '../sync/sync_engine.dart';
+
+// Queueable-action exception — the *server* rejected the action (e.g. a
+// stale/invalid status transition), as opposed to the action simply still
+// being queued because the device is offline. Screens catch this the same
+// way they'd catch a direct Dio error; a plain offline queue-and-continue
+// never throws at all (see _runQueued below).
+class SyncRejectedException implements Exception {
+  final String message;
+  SyncRejectedException(this.message);
+  @override
+  String toString() => message;
+}
 
 // One repository class per module, per docs/12-frontend-data-contracts.md §3.
 // No assigneeId is ever sent from this app — the backend derives "my jobs"
 // server-side from the JWT's employeeId once scope is OWN
 // (serviceRequests.service.ts listServiceRequests), so there's nothing here
 // for a compromised/tampered client to override.
+//
+// Offline-first per docs/manish/09-vendor-app-functional-plan.md §1-2: every
+// Execution write below (status change, inspection, work, completion) goes
+// through SyncRepository.enqueue() first — never a direct HTTP call — so it
+// always succeeds locally regardless of connectivity, then SyncEngine makes
+// a best-effort immediate flush. Reads (listJobs/getJob), the completion-OTP
+// pair (inherently needs a live round trip to reach the customer), and image
+// upload (would need to queue the file itself, not just JSON — a further
+// phase) are NOT queued; they still call the API directly.
 class JobRepository {
   final ApiClient _client;
-  JobRepository(this._client);
+  final SyncRepository _syncRepo;
+  final SyncEngine _syncEngine;
+  JobRepository(this._client, this._syncRepo, this._syncEngine);
 
   Future<List<JobSummary>> listJobs({List<String>? statusIn}) async {
     final res = await _client.dio.get('/service-requests', queryParameters: {
@@ -25,36 +50,54 @@ class JobRepository {
     return JobDetail.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
+  // Enqueues then makes one best-effort sync attempt. Resolves normally
+  // whether it actually reached the server (SYNCED) or is still waiting for
+  // connectivity (PENDING) — a tap on "Accept"/"Start Travel"/etc. must never
+  // block on network. Only throws if the *server* actively rejected it.
+  Future<void> _runQueued(String jobId, String actionType, Map<String, dynamic> payload) async {
+    final action = await _syncRepo.enqueue(jobId: jobId, actionType: actionType, payload: payload);
+    await _syncEngine.syncJob(jobId);
+    final latest = await _syncRepo.getById(action.id);
+    if (latest.status == 'REJECTED') {
+      throw SyncRejectedException(latest.resultMessage ?? 'This action was rejected by the server.');
+    }
+  }
+
   // Per docs/rohit/06-vendor-app-screen-list.md "Execution" — Accept/Reject,
   // Start Travel, Arrival, and the rest of the status ladder a TECHNICIAN/
-  // EMPLOYEE actor can drive are all just this one endpoint with different
-  // `toStatus` values (confirmed against scripts/seed.ts's SERVICE_REQUEST
-  // transition table — there's no separate accept/reject endpoint).
-  Future<void> changeStatus(String id, String toStatus, {String? reason}) async {
-    await _client.dio.patch('/service-requests/$id/status', data: {
+  // EMPLOYEE actor can drive are all just this one action type with
+  // different `toStatus` values (confirmed against scripts/seed.ts's
+  // SERVICE_REQUEST transition table — there's no separate accept/reject
+  // endpoint).
+  Future<void> changeStatus(String id, String toStatus, {String? reason}) {
+    return _runQueued(id, 'STATUS_CHANGE', {
       'toStatus': toStatus,
       if (reason != null && reason.isNotEmpty) 'reason': reason,
     });
   }
 
-  // Broadcasts live location to the customer (realtime) — distinct from the
-  // `geo` field on changeStatus, which the backend accepts but doesn't
-  // actually persist/emit (serviceRequests.service.ts's updateStatus ignores
-  // it), so this is the only path that actually updates live tracking.
+  // Broadcasts live location to the customer (realtime) — deliberately NOT
+  // queued. Per docs/manish/09 §5: "old stale pings are dropped rather than
+  // sent late... only the most recent unsent ping matters," so a failed ping
+  // should just be dropped, not held for later delivery.
   Future<void> sendLocationPing(String id, double lat, double lng) async {
-    await _client.dio.post('/service-requests/$id/location-ping', data: {'lat': lat, 'lng': lng});
+    try {
+      await _client.dio.post('/service-requests/$id/location-ping', data: {'lat': lat, 'lng': lng});
+    } catch (_) {
+      // Best-effort — see comment above.
+    }
   }
 
-  Future<void> updateInspection(String id, {String? defectFound, List<String>? symptoms, String? solutionType}) async {
-    await _client.dio.patch('/service-requests/$id/visits/inspection', data: {
+  Future<void> updateInspection(String id, {String? defectFound, List<String>? symptoms, String? solutionType}) {
+    return _runQueued(id, 'UPDATE_INSPECTION', {
       if (defectFound != null && defectFound.isNotEmpty) 'defectFound': defectFound,
       if (symptoms != null) 'symptoms': symptoms,
       if (solutionType != null && solutionType.isNotEmpty) 'solutionType': solutionType,
     });
   }
 
-  Future<void> updateWork(String id, {double? labourCharge, String? workNotes, List<String>? beforeImages, List<String>? afterImages}) async {
-    await _client.dio.patch('/service-requests/$id/visits/work', data: {
+  Future<void> updateWork(String id, {double? labourCharge, String? workNotes, List<String>? beforeImages, List<String>? afterImages}) {
+    return _runQueued(id, 'UPDATE_WORK', {
       if (labourCharge != null) 'labourCharge': labourCharge,
       if (workNotes != null && workNotes.isNotEmpty) 'workNotes': workNotes,
       if (beforeImages != null && beforeImages.isNotEmpty) 'beforeImages': beforeImages,
@@ -62,8 +105,8 @@ class JobRepository {
     });
   }
 
-  Future<void> completeVisit(String id, {required String proofType, String? value, String? url}) async {
-    await _client.dio.post('/service-requests/$id/visits/complete', data: {
+  Future<void> completeVisit(String id, {required String proofType, String? value, String? url}) {
+    return _runQueued(id, 'COMPLETE_VISIT', {
       'completionProof': {
         'type': proofType,
         if (value != null) 'value': value,
@@ -74,6 +117,8 @@ class JobRepository {
 
   // OTP goes to the CUSTOMER's phone, not the technician's — this just
   // triggers/verifies it; the technician asks the customer to read it out.
+  // Inherently online-only (the whole point is a live SMS/WhatsApp round
+  // trip), so not queued.
   Future<void> requestCompletionOtp(String id) async {
     await _client.dio.post('/service-requests/$id/completion-otp/request');
   }
@@ -86,7 +131,9 @@ class JobRepository {
   // citycalls-customer-mobile's booking_repository.dart uploadIssueImage,
   // independently implemented (no shared code between the two apps) —
   // category is BEFORE_SERVICE_IMAGE/AFTER_SERVICE_IMAGE here instead of
-  // ISSUE_IMAGE, and entityId is the ServiceRequest, not the Customer.
+  // ISSUE_IMAGE, and entityId is the ServiceRequest, not the Customer. Not
+  // queued — queuing a multipart file (not just JSON) through the same
+  // pending_actions table is a further phase, not built here.
   Future<String> uploadJobImage(String jobId, File file, {required String category}) async {
     final signedRes = await _client.dio.post('/files/signed-upload', data: {
       'category': category,

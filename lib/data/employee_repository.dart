@@ -10,4 +10,19 @@ class EmployeeRepository {
     final res = await _client.dio.get('/employees/me');
     return EmployeeProfile.fromJson(res.data['data'] as Map<String, dynamic>);
   }
+
+  Future<void> registerFcmToken(String token) async {
+    await _client.dio.post('/employees/me/fcm-token', data: {'token': token});
+  }
+
+  Future<void> unregisterFcmToken(String token) async {
+    await _client.dio.delete('/employees/me/fcm-token', data: {'token': token});
+  }
+
+  Future<EmployeeProfile> updateAvailability(List<AvailabilityDay> availability) async {
+    final res = await _client.dio.patch('/employees/me/availability', data: {
+      'availability': availability.map((a) => {'day': a.day, 'available': a.available}).toList(),
+    });
+    return EmployeeProfile.fromJson(res.data['data'] as Map<String, dynamic>);
+  }
 }

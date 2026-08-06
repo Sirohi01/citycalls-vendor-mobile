@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
 // Independently defined from citycalls-customer-mobile's app_theme.dart —
@@ -29,6 +30,15 @@ class AppColors {
   static const white = Color(0xFFFFFFFF);
   static const red400 = Color(0xFFF87171);
 
+  // Warm base the whole light-mode app now sits on (per Manish's ask for a
+  // "halka sa yellowish" background) — a soft cream/amber wash instead of
+  // the cooler slate-100, which is also what makes the frosted-glass cards
+  // (GlassCard below) actually read as *glass over something*, rather than
+  // white-on-white.
+  static const bgWarm = Color(0xFFFFF8E9);
+  static const bgWarmDeep = Color(0xFFFDECC1);
+  static const gold400 = Color(0xFFE8B923);
+
   // Job-status/urgency signaling — a field app lives and dies by "what needs
   // my attention right now," so these get real color weight, not just text.
   static const urgent = Color(0xFFDC2626); // red-600 — overdue/SLA breached
@@ -50,11 +60,11 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: AppColors.slate100,
+      scaffoldBackgroundColor: AppColors.bgWarm,
       fontFamily: 'Roboto',
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.slate100,
-        surfaceTintColor: AppColors.slate100,
+        backgroundColor: AppColors.bgWarm,
+        surfaceTintColor: AppColors.bgWarm,
         foregroundColor: AppColors.slate900,
         elevation: 0,
         centerTitle: false,
@@ -158,9 +168,67 @@ ButtonStyle authButtonStyle() {
   );
 }
 
-// Frosted-glass card background — used across Dashboard/My Jobs/Job Detail/
-// Profile for a consistent premium look on top of the app's slate-100
-// scaffold, distinct from the flat white Material cards used elsewhere.
+// Real frosted-glass card — BackdropFilter blur (not just a translucent
+// fill), so it actually reads as glass sitting over the warm scaffold
+// background rather than a flat off-white box. Used across every screen in
+// this app now (Dashboard/My Jobs/History/Job Detail/Profile/Inspection/
+// Work Progress/Completion) for a single consistent glassmorphic language.
+// `padding: null` lets a caller that wants to lay out its own Padding/no
+// padding (e.g. wrapping a ListTile) skip the default.
+class GlassCard extends StatelessWidget {
+  final Widget child;
+  final double radius;
+  final EdgeInsetsGeometry? padding;
+  final Color tint;
+  final double blur;
+  final Color? borderColor;
+  final double borderWidth;
+
+  const GlassCard({
+    super.key,
+    required this.child,
+    this.radius = 20,
+    this.padding = const EdgeInsets.all(16),
+    this.tint = Colors.white,
+    this.blur = 16,
+    this.borderColor,
+    this.borderWidth = 1.2,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [BoxShadow(color: (borderColor ?? AppColors.slate900).withValues(alpha: borderColor != null ? 0.1 : 0.07), blurRadius: 24, offset: const Offset(0, 10))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+          child: Container(
+            width: double.infinity,
+            padding: padding,
+            decoration: BoxDecoration(
+              color: tint.withValues(alpha: 0.62),
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: borderColor ?? Colors.white.withValues(alpha: 0.7), width: borderWidth),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.white.withValues(alpha: 0.35), Colors.white.withValues(alpha: 0.05)],
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Kept for any call site still using the old flat (non-blurred) decoration —
+// prefer GlassCard for new/updated screens.
 BoxDecoration glassCardDecoration({double radius = 18}) {
   return BoxDecoration(
     color: Colors.white.withValues(alpha: 0.7),

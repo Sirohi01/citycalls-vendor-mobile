@@ -40,6 +40,17 @@ dependencies:
   socket_io_client: ^3.1.6
   flutter_secure_storage: ^10.3.1
   image_picker: ^1.1.2
+  # Offline-first action queue (docs/manish/09-vendor-app-functional-plan.md
+  # §1-2) — drift is the local SQLite layer; connectivity_plus tells the sync
+  # engine when to attempt a flush instead of polling blindly.
+  drift: ^2.20.3
+  sqlite3_flutter_libs: ^0.5.24
+  path_provider: ^2.1.4
+  path: ^1.9.0
+  connectivity_plus: ^6.1.0
+  uuid: ^4.5.1
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.1.6
 
 dev_dependencies:
   flutter_test:
@@ -54,6 +65,7 @@ dev_dependencies:
   build_runner: ^2.4.15
   json_serializable: ^6.9.5
   flutter_launcher_icons: ^0.14.3
+  drift_dev: ^2.20.3
 
 flutter_launcher_icons:
   android: true

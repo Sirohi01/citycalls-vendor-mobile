@@ -82,7 +82,7 @@ class _WorkProgressScreenState extends ConsumerState<WorkProgressScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.slate100,
+      backgroundColor: AppColors.bgWarm,
       appBar: AppBar(title: const Text('Work Progress')),
       body: ListView(
         padding: const EdgeInsets.all(20),

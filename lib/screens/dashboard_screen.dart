@@ -4,10 +4,12 @@ import '../models/employee_models.dart';
 import '../models/job_models.dart';
 import '../providers/employee_providers.dart';
 import '../providers/job_providers.dart';
+import '../providers/sync_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glow_blob.dart';
 import 'job_detail_screen.dart';
 import 'my_jobs_screen.dart';
+import 'sync_status_screen.dart';
 
 // "Dashboard" home tab — greeting + branch context + new-lead alerts +
 // at-a-glance stats + today's route preview, distinct from My Jobs (the
@@ -29,7 +31,7 @@ class DashboardScreen extends ConsumerWidget {
     final urgentCount = jobs.value?.where((j) => j.priority == 'URGENT' || j.priority == 'HIGH').length;
 
     return Scaffold(
-      backgroundColor: AppColors.slate100,
+      backgroundColor: AppColors.bgWarm,
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(myEmployeeProfileProvider);
@@ -47,6 +49,40 @@ class DashboardScreen extends ConsumerWidget {
                 loading: () => const SizedBox.shrink(),
                 error: (_, __) => const SizedBox.shrink(),
               ),
+            ),
+            Consumer(
+              builder: (context, ref, _) {
+                final pending = ref.watch(pendingActionsProvider);
+                final queued = pending.value?.where((a) => a.status != 'SYNCED').toList() ?? [];
+                if (queued.isEmpty) return const SizedBox.shrink();
+                final rejected = queued.where((a) => a.status == 'REJECTED').length;
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: GlassCard(
+                    radius: 14,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    borderColor: rejected > 0 ? AppColors.urgent.withValues(alpha: 0.4) : null,
+                    child: InkWell(
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SyncStatusScreen())),
+                      child: Row(
+                        children: [
+                          Icon(rejected > 0 ? Icons.sync_problem : Icons.sync, size: 18, color: rejected > 0 ? AppColors.urgent : AppColors.warning),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              rejected > 0
+                                  ? '$rejected action(s) need attention'
+                                  : '${queued.length} action(s) waiting to sync',
+                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: rejected > 0 ? AppColors.urgent : AppColors.slate700),
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right, size: 18, color: AppColors.slate400),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
             if (pendingAcceptance.isNotEmpty)
               Padding(
@@ -225,16 +261,18 @@ class _BranchStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final parts = [profile.branchName, profile.subBranchName, profile.teamName].where((s) => s != null).cast<String>().toList();
     if (parts.isEmpty) return const SizedBox.shrink();
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: glassCardDecoration(radius: 14),
-      child: Row(
-        children: [
-          const Icon(Icons.store_outlined, size: 16, color: AppColors.primary),
-          const SizedBox(width: 8),
-          Expanded(child: Text(parts.join(' • '), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.slate700))),
-        ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: GlassCard(
+        radius: 14,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.store_outlined, size: 16, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Expanded(child: Text(parts.join(' • '), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.slate700))),
+          ],
+        ),
       ),
     );
   }
@@ -249,9 +287,8 @@ class _MiniStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GlassCard(
       padding: const EdgeInsets.all(14),
-      decoration: glassCardDecoration(),
       child: Row(
         children: [
           Container(
@@ -286,15 +323,11 @@ class _JobPreviewCard extends StatelessWidget {
     final accent = statusAccentColor(job.status);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        decoration: highlight
-            ? BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppColors.urgent.withValues(alpha: 0.4), width: 1.4),
-                boxShadow: [BoxShadow(color: AppColors.urgent.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 6))],
-              )
-            : glassCardDecoration(),
+      child: GlassCard(
+        radius: 18,
+        padding: EdgeInsets.zero,
+        borderColor: highlight ? AppColors.urgent.withValues(alpha: 0.4) : null,
+        borderWidth: highlight ? 1.4 : 1.2,
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -341,11 +374,9 @@ class _EmptyTodayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 40),
-      decoration: glassCardDecoration(),
-      child: const Column(
+    return const GlassCard(
+      padding: EdgeInsets.symmetric(vertical: 40),
+      child: Column(
         children: [
           Icon(Icons.task_alt, size: 44, color: AppColors.slate400),
           SizedBox(height: 10),

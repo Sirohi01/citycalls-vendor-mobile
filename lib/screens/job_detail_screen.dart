@@ -84,7 +84,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     final job = ref.watch(jobDetailProvider(widget.jobId));
 
     return Scaffold(
-      backgroundColor: AppColors.slate100,
+      backgroundColor: AppColors.bgWarm,
       appBar: AppBar(title: const Text('Job Details')),
       body: job.when(
         data: (j) => Stack(
@@ -486,11 +486,6 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: glassCardDecoration(radius: 16),
-      child: child,
-    );
+    return GlassCard(radius: 16, child: child);
   }
 }

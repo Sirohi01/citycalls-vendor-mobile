@@ -103,7 +103,7 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.slate100,
+      backgroundColor: AppColors.bgWarm,
       appBar: AppBar(title: const Text('Complete Job')),
       body: ListView(
         padding: const EdgeInsets.all(20),

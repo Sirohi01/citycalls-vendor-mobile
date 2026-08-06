@@ -2,9 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/job_repository.dart';
 import '../models/job_models.dart';
 import 'auth_providers.dart';
+import 'sync_providers.dart';
 
 final jobRepositoryProvider = Provider<JobRepository>((ref) {
-  return JobRepository(ref.watch(apiClientProvider));
+  return JobRepository(ref.watch(apiClientProvider), ref.watch(syncRepositoryProvider), ref.watch(syncEngineProvider));
 });
 
 // "Active route" — everything not yet in a completed/closed/cancelled state.

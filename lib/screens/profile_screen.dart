@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/employee_models.dart';
 import '../providers/auth_providers.dart';
 import '../providers/employee_providers.dart';
+import '../providers/push_providers.dart';
 import '../theme/app_theme.dart';
 import 'otp_request_screen.dart';
+import 'sync_status_screen.dart';
 
-// Per docs/rohit/06-vendor-app-screen-list.md "Profile" — Profile view.
-// Availability toggle + Notification Center are separate screens flagged
-// there too, not yet built (this is the read-only profile + logout slice).
+// Per docs/rohit/06-vendor-app-screen-list.md "Profile" — Profile view +
+// Availability toggle. Notification Center is a separate screen, not yet
+// built.
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -16,7 +19,7 @@ class ProfileScreen extends ConsumerWidget {
     final profile = ref.watch(myEmployeeProfileProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.slate100,
+      backgroundColor: AppColors.bgWarm,
       appBar: AppBar(
         title: const Text('Profile'),
         // Always visible regardless of whether the profile fetch below
@@ -38,10 +41,9 @@ class ProfileScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              Container(
-                width: double.infinity,
+              GlassCard(
+                radius: 20,
                 padding: const EdgeInsets.symmetric(vertical: 28),
-                decoration: glassCardDecoration(radius: 20),
                 child: Column(
                   children: [
                     Container(
@@ -66,10 +68,7 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: glassCardDecoration(),
+              GlassCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -85,10 +84,7 @@ class ProfileScreen extends ConsumerWidget {
               ),
               if (p.skills.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: glassCardDecoration(),
+                GlassCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -111,10 +107,7 @@ class ProfileScreen extends ConsumerWidget {
               ],
               if (p.certifications.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: glassCardDecoration(),
+                GlassCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -139,36 +132,19 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                 ),
               ],
-              if (p.availability.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: glassCardDecoration(),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Working Days', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-                      const SizedBox(height: 12),
-                      Column(
-                        children: (p.availability..sort((a, b) => a.day.compareTo(b.day)))
-                            .map((a) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Row(
-                                    children: [
-                                      Expanded(child: Text(a.label, style: const TextStyle(fontSize: 13))),
-                                      Icon(a.available ? Icons.check_circle : Icons.remove_circle_outline, size: 18, color: a.available ? AppColors.success : AppColors.slate400),
-                                      const SizedBox(width: 6),
-                                      Text(a.available ? 'Working' : 'Off', style: TextStyle(fontSize: 12, color: a.available ? AppColors.success : AppColors.slate500, fontWeight: FontWeight.w600)),
-                                    ],
-                                  ),
-                                ))
-                            .toList(),
-                      ),
-                    ],
-                  ),
+              const SizedBox(height: 16),
+              _AvailabilitySection(availability: p.availability),
+              const SizedBox(height: 16),
+              GlassCard(
+                padding: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.sync, color: AppColors.primary),
+                  title: const Text('Sync Status', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+                  subtitle: const Text('Offline actions waiting to sync', style: TextStyle(fontSize: 11.5)),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.slate400),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SyncStatusScreen())),
                 ),
-              ],
+              ),
               const SizedBox(height: 24),
               OutlinedButton.icon(
                 onPressed: () => _logout(context, ref),
@@ -212,10 +188,109 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   Future<void> _logout(BuildContext context, WidgetRef ref) async {
+    await ref.read(pushNotificationServiceProvider).unregisterCurrentToken();
     await ref.read(authProvider.notifier).logout();
     if (context.mounted) {
       Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const OtpRequestScreen()), (route) => false);
     }
+  }
+}
+
+// Per docs/rohit/06-vendor-app-screen-list.md "Profile" — Availability
+// toggle. Optimistic: flips locally the instant a switch is tapped, saves in
+// the background via PATCH /employees/me/availability, and reverts with an
+// error message if that save fails — never leaves the switch silently out
+// of sync with what's actually persisted.
+class _AvailabilitySection extends ConsumerStatefulWidget {
+  final List<AvailabilityDay> availability;
+  const _AvailabilitySection({required this.availability});
+
+  @override
+  ConsumerState<_AvailabilitySection> createState() => _AvailabilitySectionState();
+}
+
+class _AvailabilitySectionState extends ConsumerState<_AvailabilitySection> {
+  late List<AvailabilityDay> _days;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _days = _normalized(widget.availability);
+  }
+
+  @override
+  void didUpdateWidget(covariant _AvailabilitySection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_saving) _days = _normalized(widget.availability);
+  }
+
+  // A newly-created Employee record has no availability configured at all —
+  // defaults to "working every day" so the technician has something sensible
+  // to toggle off, rather than an empty section implying nothing is set up.
+  List<AvailabilityDay> _normalized(List<AvailabilityDay> source) {
+    if (source.isEmpty) {
+      return List.generate(7, (day) => AvailabilityDay(day: day, available: true));
+    }
+    final byDay = {for (final d in source) d.day: d};
+    return List.generate(7, (day) => byDay[day] ?? AvailabilityDay(day: day, available: true));
+  }
+
+  Future<void> _toggle(int day, bool value) async {
+    final previous = _days;
+    setState(() {
+      _days = _days.map((d) => d.day == day ? AvailabilityDay(day: d.day, available: value) : d).toList();
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await ref.read(employeeRepositoryProvider).updateAvailability(_days);
+      ref.invalidate(myEmployeeProfileProvider);
+    } catch (e) {
+      setState(() {
+        _days = previous;
+        _error = 'Could not save — try again.';
+      });
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(child: Text('Working Days', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5))),
+              if (_saving) const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Column(
+            children: _days
+                .map((a) => Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text(a.label, style: TextStyle(fontSize: 13, color: a.available ? AppColors.slate900 : AppColors.slate500))),
+                          Switch(
+                            value: a.available,
+                            activeTrackColor: AppColors.primary,
+                            onChanged: _saving ? null : (value) => _toggle(a.day, value),
+                          ),
+                        ],
+                      ),
+                    ))
+                .toList(),
+          ),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_error!, style: const TextStyle(color: AppColors.urgent, fontSize: 11.5))),
+        ],
+      ),
+    );
   }
 }
 

@@ -70,7 +70,7 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.slate100,
+      backgroundColor: AppColors.bgWarm,
       appBar: AppBar(title: const Text('Inspection & Diagnosis')),
       body: ListView(
         padding: const EdgeInsets.all(20),

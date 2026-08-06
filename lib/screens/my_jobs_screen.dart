@@ -17,7 +17,7 @@ class MyJobsScreen extends ConsumerWidget {
     final jobs = ref.watch(myJobsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.slate100,
+      backgroundColor: AppColors.bgWarm,
       appBar: AppBar(title: const Text('My Jobs')),
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(myJobsProvider),
@@ -60,12 +60,12 @@ class _JobCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = statusAccentColor(job.status);
-    return Container(
-      decoration: glassCardDecoration(),
+    return GlassCard(
+      padding: EdgeInsets.zero,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => JobDetailScreen(jobId: job.id))),
           child: Padding(
             padding: const EdgeInsets.all(16),

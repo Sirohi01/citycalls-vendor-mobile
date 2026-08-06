@@ -19,7 +19,7 @@ class ProfileScreen extends ConsumerWidget {
     final profile = ref.watch(myEmployeeProfileProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.bgWarm,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Profile'),
         // Always visible regardless of whether the profile fetch below

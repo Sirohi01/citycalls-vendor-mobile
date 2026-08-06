@@ -117,6 +117,68 @@ class AppTheme {
       ),
     );
   }
+
+  static ThemeData dark() {
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: AppColors.teal400,
+      primary: AppColors.teal400,
+      brightness: Brightness.dark,
+      surface: AppColors.slate900,
+    );
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: AppColors.slate950,
+      fontFamily: 'Roboto',
+      appBarTheme: const AppBarTheme(
+        backgroundColor: AppColors.slate950,
+        surfaceTintColor: AppColors.slate950,
+        foregroundColor: AppColors.white,
+        elevation: 0,
+        centerTitle: false,
+        titleTextStyle: TextStyle(color: AppColors.white, fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.teal400,
+          foregroundColor: AppColors.slate950,
+          minimumSize: const Size.fromHeight(50),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.teal400,
+          minimumSize: const Size.fromHeight(50),
+          side: const BorderSide(color: AppColors.teal400, width: 1.2),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.slate900,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.slate700)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.teal400, width: 1.5)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.red400)),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: AppColors.slate900,
+        selectedItemColor: AppColors.teal400,
+        unselectedItemColor: AppColors.slate400,
+        type: BottomNavigationBarType.fixed,
+        showUnselectedLabels: true,
+      ),
+      cardTheme: CardThemeData(
+        color: AppColors.slate900,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      dividerColor: AppColors.slate700,
+    );
+  }
 }
 
 // Customer-facing statuses are collapsed for readability elsewhere in this
@@ -179,7 +241,7 @@ class GlassCard extends StatelessWidget {
   final Widget child;
   final double radius;
   final EdgeInsetsGeometry? padding;
-  final Color tint;
+  final Color? tint;
   final double blur;
   final Color? borderColor;
   final double borderWidth;
@@ -189,7 +251,7 @@ class GlassCard extends StatelessWidget {
     required this.child,
     this.radius = 20,
     this.padding = const EdgeInsets.all(16),
-    this.tint = Colors.white,
+    this.tint,
     this.blur = 16,
     this.borderColor,
     this.borderWidth = 1.2,
@@ -197,10 +259,13 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = tint ?? (isDark ? AppColors.slate900 : Colors.white);
+    final effectiveBorder = borderColor ?? (isDark ? AppColors.slate700 : Colors.white.withValues(alpha: 0.7));
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        boxShadow: [BoxShadow(color: (borderColor ?? AppColors.slate900).withValues(alpha: borderColor != null ? 0.1 : 0.07), blurRadius: 24, offset: const Offset(0, 10))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.07), blurRadius: 24, offset: const Offset(0, 10))],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
@@ -210,13 +275,15 @@ class GlassCard extends StatelessWidget {
             width: double.infinity,
             padding: padding,
             decoration: BoxDecoration(
-              color: tint.withValues(alpha: 0.62),
+              color: surface.withValues(alpha: isDark ? 0.86 : 0.62),
               borderRadius: BorderRadius.circular(radius),
-              border: Border.all(color: borderColor ?? Colors.white.withValues(alpha: 0.7), width: borderWidth),
+              border: Border.all(color: effectiveBorder, width: borderWidth),
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Colors.white.withValues(alpha: 0.35), Colors.white.withValues(alpha: 0.05)],
+                colors: isDark
+                    ? [Colors.white.withValues(alpha: 0.06), Colors.transparent]
+                    : [Colors.white.withValues(alpha: 0.35), Colors.white.withValues(alpha: 0.05)],
               ),
             ),
             child: child,

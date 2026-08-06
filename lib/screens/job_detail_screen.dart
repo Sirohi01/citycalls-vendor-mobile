@@ -44,6 +44,28 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     }
   }
 
+  Future<void> _startTravel(JobDetail job) async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final repository = ref.read(jobRepositoryProvider);
+      // ACCEPTED cannot transition directly to EN_ROUTE on the API. Preserve
+      // the required workflow hop while keeping this a single user action.
+      if (job.status == 'ACCEPTED') {
+        await repository.changeStatus(widget.jobId, 'APPOINTMENT_SCHEDULED');
+      }
+      await repository.changeStatus(widget.jobId, 'TECHNICIAN_EN_ROUTE');
+      ref.invalidate(jobDetailProvider(widget.jobId));
+      ref.invalidate(myJobsProvider);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Failed: $e');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   Future<void> _confirmAndChangeStatus(String toStatus, {required String title, required String message, String confirmLabel = 'Confirm'}) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -84,7 +106,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     final job = ref.watch(jobDetailProvider(widget.jobId));
 
     return Scaffold(
-      backgroundColor: AppColors.bgWarm,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Job Details')),
       body: job.when(
         data: (j) => Stack(
@@ -110,6 +132,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
                 job: j,
                 submitting: _submitting,
                 onChangeStatus: _changeStatus,
+                onStartTravel: () => _startTravel(j),
                 onConfirmAndChangeStatus: _confirmAndChangeStatus,
                 onReject: _rejectWithReason,
                 onReload: () => ref.invalidate(jobDetailProvider(widget.jobId)),
@@ -134,6 +157,7 @@ class _ActionBar extends StatelessWidget {
   final JobDetail job;
   final bool submitting;
   final Future<void> Function(String toStatus, {String? reason}) onChangeStatus;
+  final VoidCallback onStartTravel;
   final Future<void> Function(String toStatus, {required String title, required String message, String confirmLabel}) onConfirmAndChangeStatus;
   final VoidCallback onReject;
   final VoidCallback onReload;
@@ -142,6 +166,7 @@ class _ActionBar extends StatelessWidget {
     required this.job,
     required this.submitting,
     required this.onChangeStatus,
+    required this.onStartTravel,
     required this.onConfirmAndChangeStatus,
     required this.onReject,
     required this.onReload,
@@ -154,7 +179,7 @@ class _ActionBar extends StatelessWidget {
     return Container(
       padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, -4))],
       ),
       child: submitting ? const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator())) : content,
@@ -188,7 +213,7 @@ class _ActionBar extends StatelessWidget {
       case 'APPOINTMENT_SCHEDULED':
       case 'RESCHEDULED':
         return FilledButton.icon(
-          onPressed: () => onChangeStatus('TECHNICIAN_EN_ROUTE'),
+          onPressed: onStartTravel,
           icon: const Icon(Icons.directions_car_outlined, size: 18),
           label: const Text('Start Travel'),
         );

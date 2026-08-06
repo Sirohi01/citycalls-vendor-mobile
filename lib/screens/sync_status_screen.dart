@@ -16,7 +16,7 @@ class SyncStatusScreen extends ConsumerWidget {
     final actions = ref.watch(pendingActionsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.bgWarm,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Sync Status'),
         actions: [

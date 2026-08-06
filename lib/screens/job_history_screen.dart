@@ -19,7 +19,7 @@ class JobHistoryScreen extends ConsumerWidget {
     final jobs = ref.watch(completedJobsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.bgWarm,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Job History')),
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(completedJobsProvider),

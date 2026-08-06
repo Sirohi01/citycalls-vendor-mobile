@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/push_providers.dart';
 import '../providers/sync_providers.dart';
-import '../theme/app_theme.dart';
 import 'dashboard_screen.dart';
 import 'my_jobs_screen.dart';
 import 'job_history_screen.dart';
@@ -57,27 +56,30 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     return Scaffold(
       body: IndexedStack(index: _index, children: _screens),
-      extendBody: true,
-      bottomNavigationBar: ClipRRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.75),
-              border: const Border(top: BorderSide(color: Colors.white, width: 1)),
-              boxShadow: [BoxShadow(color: AppColors.slate900.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, -4))],
-            ),
-            child: BottomNavigationBar(
-              currentIndex: _index,
-              onTap: (i) => setState(() => _index = i),
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              items: const [
-                BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), activeIcon: Icon(Icons.dashboard), label: 'Dashboard'),
-                BottomNavigationBarItem(icon: Icon(Icons.work_outline), activeIcon: Icon(Icons.work), label: 'My Jobs'),
-                BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
-                BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'Profile'),
-              ],
+      extendBody: false,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+                border: Border(top: BorderSide(color: Theme.of(context).dividerColor, width: 1)),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: const Offset(0, -4))],
+              ),
+              child: BottomNavigationBar(
+                currentIndex: _index,
+                onTap: (i) => setState(() => _index = i),
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                items: const [
+                  BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), activeIcon: Icon(Icons.dashboard), label: 'Dashboard'),
+                  BottomNavigationBarItem(icon: Icon(Icons.work_outline), activeIcon: Icon(Icons.work), label: 'My Jobs'),
+                  BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
+                  BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'Profile'),
+                ],
+              ),
             ),
           ),
         ),

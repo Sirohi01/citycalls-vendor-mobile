@@ -37,6 +37,8 @@ class CityCallsVendorApp extends StatelessWidget {
       title: 'CityCalls Field',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.system,
       home: const SplashScreen(),
     );
   }

@@ -17,7 +17,7 @@ class MyJobsScreen extends ConsumerWidget {
     final jobs = ref.watch(myJobsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.bgWarm,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('My Jobs')),
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(myJobsProvider),

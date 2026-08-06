@@ -31,7 +31,7 @@ class DashboardScreen extends ConsumerWidget {
     final urgentCount = jobs.value?.where((j) => j.priority == 'URGENT' || j.priority == 'HIGH').length;
 
     return Scaffold(
-      backgroundColor: AppColors.bgWarm,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(myEmployeeProfileProvider);
@@ -94,7 +94,7 @@ class DashboardScreen extends ConsumerWidget {
                       children: [
                         const Icon(Icons.notifications_active, color: AppColors.urgent, size: 18),
                         const SizedBox(width: 6),
-                        Text('New Job Requests (${pendingAcceptance.length})', style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold, color: AppColors.slate900)),
+                        Text('New Job Requests (${pendingAcceptance.length})', style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -113,7 +113,7 @@ class DashboardScreen extends ConsumerWidget {
                     Row(
                       children: [
                         Expanded(child: _MiniStat(icon: Icons.priority_high, label: 'Urgent / High Priority', value: urgentCount, color: AppColors.urgent)),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
                         Expanded(child: _MiniStat(icon: Icons.calendar_today_outlined, label: 'This Week Completed', value: completed.value?.length, color: AppColors.success)),
                       ],
                     ),
@@ -122,7 +122,7 @@ class DashboardScreen extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Today\'s Route', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold, color: AppColors.slate900)),
+                      const Text('Today\'s Route', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
                       TextButton(
                         onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyJobsScreen())),
                         style: TextButton.styleFrom(foregroundColor: AppColors.primary, padding: EdgeInsets.zero, minimumSize: Size.zero),
@@ -203,7 +203,7 @@ class _Header extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(child: _StatChip(icon: Icons.mark_email_unread_outlined, label: 'New', value: pendingCount, badge: pendingCount > 0)),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
                         Expanded(child: _StatChip(icon: Icons.work_outline, label: 'Active', value: activeCount)),
                         const SizedBox(width: 10),
                         Expanded(child: _StatChip(icon: Icons.task_alt, label: 'Done', value: completedCount)),
@@ -230,7 +230,7 @@ class _StatChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       decoration: BoxDecoration(
         color: badge ? Colors.white.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
@@ -243,7 +243,7 @@ class _StatChip extends StatelessWidget {
           Icon(icon, color: Colors.white, size: 17),
           const SizedBox(height: 6),
           Text(value?.toString() ?? '—', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, height: 1.1)),
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10.5)),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 10.5)),
         ],
       ),
     );

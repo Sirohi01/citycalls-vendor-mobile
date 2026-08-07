@@ -17,20 +17,6 @@ class SyncRejectedException implements Exception {
   String toString() => message;
 }
 
-// One repository class per module, per docs/12-frontend-data-contracts.md §3.
-// No assigneeId is ever sent from this app — the backend derives "my jobs"
-// server-side from the JWT's employeeId once scope is OWN
-// (serviceRequests.service.ts listServiceRequests), so there's nothing here
-// for a compromised/tampered client to override.
-//
-// Offline-first per docs/manish/09-vendor-app-functional-plan.md §1-2: every
-// Execution write below (status change, inspection, work, completion) goes
-// through SyncRepository.enqueue() first — never a direct HTTP call — so it
-// always succeeds locally regardless of connectivity, then SyncEngine makes
-// a best-effort immediate flush. Reads (listJobs/getJob), the completion-OTP
-// pair (inherently needs a live round trip to reach the customer), and image
-// upload (would need to queue the file itself, not just JSON — a further
-// phase) are NOT queued; they still call the API directly.
 class JobRepository {
   final ApiClient _client;
   final SyncRepository _syncRepo;
@@ -40,9 +26,12 @@ class JobRepository {
   Future<List<JobSummary>> listJobs({List<String>? statusIn}) async {
     final res = await _client.dio.get('/service-requests', queryParameters: {
       'limit': 100,
-      if (statusIn != null && statusIn.isNotEmpty) 'status_in': statusIn.join(','),
+      if (statusIn != null && statusIn.isNotEmpty)
+        'status_in': statusIn.join(','),
     });
-    return (res.data['data'] as List).map((j) => JobSummary.fromJson(j as Map<String, dynamic>)).toList();
+    return (res.data['data'] as List)
+        .map((j) => JobSummary.fromJson(j as Map<String, dynamic>))
+        .toList();
   }
 
   Future<JobDetail> getJob(String id) async {
@@ -50,16 +39,15 @@ class JobRepository {
     return JobDetail.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
-  // Enqueues then makes one best-effort sync attempt. Resolves normally
-  // whether it actually reached the server (SYNCED) or is still waiting for
-  // connectivity (PENDING) — a tap on "Accept"/"Start Travel"/etc. must never
-  // block on network. Only throws if the *server* actively rejected it.
-  Future<void> _runQueued(String jobId, String actionType, Map<String, dynamic> payload) async {
-    final action = await _syncRepo.enqueue(jobId: jobId, actionType: actionType, payload: payload);
+  Future<void> _runQueued(
+      String jobId, String actionType, Map<String, dynamic> payload) async {
+    final action = await _syncRepo.enqueue(
+        jobId: jobId, actionType: actionType, payload: payload);
     await _syncEngine.syncJob(jobId);
     final latest = await _syncRepo.getById(action.id);
     if (latest.status == 'REJECTED') {
-      throw SyncRejectedException(latest.resultMessage ?? 'This action was rejected by the server.');
+      throw SyncRejectedException(
+          latest.resultMessage ?? 'This action was rejected by the server.');
     }
   }
 
@@ -82,30 +70,55 @@ class JobRepository {
   // should just be dropped, not held for later delivery.
   Future<void> sendLocationPing(String id, double lat, double lng) async {
     try {
-      await _client.dio.post('/service-requests/$id/location-ping', data: {'lat': lat, 'lng': lng});
+      await _client.dio.post('/service-requests/$id/location-ping',
+          data: {'lat': lat, 'lng': lng});
     } catch (_) {
       // Best-effort — see comment above.
     }
   }
 
-  Future<void> updateInspection(String id, {String? defectFound, List<String>? symptoms, String? solutionType}) {
+  Future<void> updateInspection(String id,
+      {String? defectFound, List<String>? symptoms, String? solutionType}) {
     return _runQueued(id, 'UPDATE_INSPECTION', {
-      if (defectFound != null && defectFound.isNotEmpty) 'defectFound': defectFound,
+      if (defectFound != null && defectFound.isNotEmpty)
+        'defectFound': defectFound,
       if (symptoms != null) 'symptoms': symptoms,
-      if (solutionType != null && solutionType.isNotEmpty) 'solutionType': solutionType,
+      if (solutionType != null && solutionType.isNotEmpty)
+        'solutionType': solutionType,
     });
   }
 
-  Future<void> updateWork(String id, {double? labourCharge, String? workNotes, List<String>? beforeImages, List<String>? afterImages}) {
+  Future<void> updateWork(String id,
+      {double? labourCharge,
+      String? workNotes,
+      List<String>? beforeImages,
+      List<String>? afterImages}) {
     return _runQueued(id, 'UPDATE_WORK', {
       if (labourCharge != null) 'labourCharge': labourCharge,
       if (workNotes != null && workNotes.isNotEmpty) 'workNotes': workNotes,
-      if (beforeImages != null && beforeImages.isNotEmpty) 'beforeImages': beforeImages,
-      if (afterImages != null && afterImages.isNotEmpty) 'afterImages': afterImages,
+      if (beforeImages != null && beforeImages.isNotEmpty)
+        'beforeImages': beforeImages,
+      if (afterImages != null && afterImages.isNotEmpty)
+        'afterImages': afterImages,
     });
   }
 
-  Future<void> completeVisit(String id, {required String proofType, String? value, String? url}) {
+  Future<void> addParts(String id, List<PartEntry> parts) {
+    return _runQueued(id, 'ADD_PARTS', {
+      'parts': parts
+          .map((p) => {
+                if (p.partId != null && p.partId!.isNotEmpty)
+                  'partId': p.partId,
+                'name': p.name,
+                'qty': p.qty,
+                'unitPrice': p.unitPrice,
+              })
+          .toList(),
+    });
+  }
+
+  Future<void> completeVisit(String id,
+      {required String proofType, String? value, String? url}) {
     return _runQueued(id, 'COMPLETE_VISIT', {
       'completionProof': {
         'type': proofType,
@@ -125,7 +138,8 @@ class JobRepository {
 
   Future<void> verifyCompletionOtp(String id, String otp) async {
     try {
-      await _client.dio.post('/service-requests/$id/completion-otp/verify', data: {'otp': otp});
+      await _client.dio.post('/service-requests/$id/completion-otp/verify',
+          data: {'otp': otp});
     } on DioException catch (e) {
       final body = e.response?.data;
       if (body is Map<String, dynamic> && body['message'] is String) {
@@ -142,7 +156,8 @@ class JobRepository {
   // ISSUE_IMAGE, and entityId is the ServiceRequest, not the Customer. Not
   // queued — queuing a multipart file (not just JSON) through the same
   // pending_actions table is a further phase, not built here.
-  Future<String> uploadJobImage(String jobId, File file, {required String category}) async {
+  Future<String> uploadJobImage(String jobId, File file,
+      {required String category}) async {
     final signedRes = await _client.dio.post('/files/signed-upload', data: {
       'category': category,
       'entityType': 'SERVICE_REQUEST',
@@ -160,7 +175,9 @@ class JobRepository {
       });
       // Deliberately a bare Dio(), not _client.dio — Cloudinary must not
       // receive our API's Authorization/Bearer header.
-      final cloudinaryRes = await Dio().post('https://api.cloudinary.com/v1_1/${signed['cloudName']}/auto/upload', data: form);
+      final cloudinaryRes = await Dio().post(
+          'https://api.cloudinary.com/v1_1/${signed['cloudName']}/auto/upload',
+          data: form);
       final confirmRes = await _client.dio.post('/files/confirm', data: {
         'category': category,
         'entityType': 'SERVICE_REQUEST',

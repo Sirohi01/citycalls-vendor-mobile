@@ -34,6 +34,22 @@ const _statusLabels = {
 };
 String jobStatusLabel(String status) =>
     _statusLabels[status] ?? status.replaceAll('_', ' ');
+
+class PartEntry {
+  final String? partId;
+  final String name;
+  final int qty;
+  final double unitPrice;
+
+  PartEntry(
+      {this.partId,
+      required this.name,
+      required this.qty,
+      required this.unitPrice});
+
+  double get total => qty * unitPrice;
+}
+
 const _completedJobStatuses = {
   'SERVICE_COMPLETED',
   'CUSTOMER_CONFIRMATION_PENDING',
@@ -104,16 +120,20 @@ class CustomerProductInfo {
   final String? modelNumber;
   final DateTime? warrantyExpiresAt;
 
-  CustomerProductInfo({this.brand, this.productType, this.modelNumber, this.warrantyExpiresAt});
+  CustomerProductInfo(
+      {this.brand, this.productType, this.modelNumber, this.warrantyExpiresAt});
 
-  bool get isUnderWarranty => warrantyExpiresAt != null && warrantyExpiresAt!.isAfter(DateTime.now());
+  bool get isUnderWarranty =>
+      warrantyExpiresAt != null && warrantyExpiresAt!.isAfter(DateTime.now());
 
   factory CustomerProductInfo.fromJson(Map<String, dynamic> json) {
     return CustomerProductInfo(
       brand: json['brand'] as String?,
       productType: json['productType'] as String?,
       modelNumber: json['modelNumber'] as String?,
-      warrantyExpiresAt: json['warrantyExpiresAt'] != null ? DateTime.tryParse(json['warrantyExpiresAt'] as String) : null,
+      warrantyExpiresAt: json['warrantyExpiresAt'] != null
+          ? DateTime.tryParse(json['warrantyExpiresAt'] as String)
+          : null,
     );
   }
 }

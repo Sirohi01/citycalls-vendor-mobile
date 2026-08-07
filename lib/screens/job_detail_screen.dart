@@ -5,16 +5,9 @@ import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
 import 'inspection_form_screen.dart';
 import 'work_progress_screen.dart';
+import 'parts_entry_screen.dart';
 import 'completion_screen.dart';
 
-// Per docs/rohit/06-vendor-app-screen-list.md "Job Management" — Job Detail,
-// plus the "Execution" flow driven from here: Accept/Reject, Start Travel,
-// Arrival, Inspection, Work, Completion, Payment. All status transitions are
-// plain PATCH /service-requests/:id/status calls (confirmed against
-// scripts/seed.ts's transition table — no dedicated accept/reject endpoint),
-// online-only for now — the offline action-queue foundation
-// (docs/manish/09-vendor-app-functional-plan.md §1-2) is a separate, later
-// phase; every button here requires connectivity today.
 class JobDetailScreen extends ConsumerStatefulWidget {
   final String jobId;
   const JobDetailScreen({super.key, required this.jobId});
@@ -33,7 +26,9 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
       _error = null;
     });
     try {
-      await ref.read(jobRepositoryProvider).changeStatus(widget.jobId, toStatus, reason: reason);
+      await ref
+          .read(jobRepositoryProvider)
+          .changeStatus(widget.jobId, toStatus, reason: reason);
       ref.invalidate(jobDetailProvider(widget.jobId));
       ref.invalidate(myJobsProvider);
       ref.invalidate(completedJobsProvider);
@@ -66,15 +61,44 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     }
   }
 
-  Future<void> _confirmAndChangeStatus(String toStatus, {required String title, required String message, String confirmLabel = 'Confirm'}) async {
+  Future<void> _markPartsPending(JobDetail job) async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final repository = ref.read(jobRepositoryProvider);
+      // PARTS_PENDING is only reachable from WORK_IN_PROGRESS on the API —
+      // hop through it first if the technician hasn't logged work yet.
+      if (job.status == 'WORK_STARTED') {
+        await repository.changeStatus(widget.jobId, 'WORK_IN_PROGRESS');
+      }
+      await repository.changeStatus(widget.jobId, 'PARTS_PENDING');
+      ref.invalidate(jobDetailProvider(widget.jobId));
+      ref.invalidate(myJobsProvider);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Failed: $e');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _confirmAndChangeStatus(String toStatus,
+      {required String title,
+      required String message,
+      String confirmLabel = 'Confirm'}) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
         content: Text(message),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(confirmLabel)),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(confirmLabel)),
         ],
       ),
     );
@@ -87,9 +111,14 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Reject this job'),
-        content: TextField(controller: controller, maxLines: 3, decoration: const InputDecoration(hintText: 'Why are you rejecting this job?')),
+        content: TextField(
+            controller: controller,
+            maxLines: 3,
+            decoration: const InputDecoration(
+                hintText: 'Why are you rejecting this job?')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.urgent),
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
@@ -98,7 +127,9 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
         ],
       ),
     );
-    if (reason != null) await _changeStatus('REASSIGNMENT_REQUIRED', reason: reason.isEmpty ? 'Rejected by technician' : reason);
+    if (reason != null)
+      await _changeStatus('REASSIGNMENT_REQUIRED',
+          reason: reason.isEmpty ? 'Rejected by technician' : reason);
   }
 
   @override
@@ -118,8 +149,12 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
                   Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: AppColors.urgent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-                    child: Text(_error!, style: const TextStyle(color: AppColors.urgent, fontSize: 12.5)),
+                    decoration: BoxDecoration(
+                        color: AppColors.urgent.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Text(_error!,
+                        style: const TextStyle(
+                            color: AppColors.urgent, fontSize: 12.5)),
                   ),
                 _JobDetailBody(job: j),
               ],
@@ -133,6 +168,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
                 submitting: _submitting,
                 onChangeStatus: _changeStatus,
                 onStartTravel: () => _startTravel(j),
+                onMarkPartsPending: () => _markPartsPending(j),
                 onConfirmAndChangeStatus: _confirmAndChangeStatus,
                 onReject: _rejectWithReason,
                 onReload: () => ref.invalidate(jobDetailProvider(widget.jobId)),
@@ -141,7 +177,9 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
           ],
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, __) => Center(child: Text('Could not load this job: $err', style: const TextStyle(color: AppColors.slate500))),
+        error: (err, __) => Center(
+            child: Text('Could not load this job: $err',
+                style: const TextStyle(color: AppColors.slate500))),
       ),
     );
   }
@@ -158,7 +196,11 @@ class _ActionBar extends StatelessWidget {
   final bool submitting;
   final Future<void> Function(String toStatus, {String? reason}) onChangeStatus;
   final VoidCallback onStartTravel;
-  final Future<void> Function(String toStatus, {required String title, required String message, String confirmLabel}) onConfirmAndChangeStatus;
+  final VoidCallback onMarkPartsPending;
+  final Future<void> Function(String toStatus,
+      {required String title,
+      required String message,
+      String confirmLabel}) onConfirmAndChangeStatus;
   final VoidCallback onReject;
   final VoidCallback onReload;
 
@@ -167,6 +209,7 @@ class _ActionBar extends StatelessWidget {
     required this.submitting,
     required this.onChangeStatus,
     required this.onStartTravel,
+    required this.onMarkPartsPending,
     required this.onConfirmAndChangeStatus,
     required this.onReject,
     required this.onReload,
@@ -177,12 +220,23 @@ class _ActionBar extends StatelessWidget {
     final content = _buildForStatus(context);
     if (content == null) return const SizedBox.shrink();
     return Container(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+      padding: EdgeInsets.fromLTRB(
+          16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, -4))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, -4))
+        ],
       ),
-      child: submitting ? const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator())) : content,
+      child: submitting
+          ? const Center(
+              child: Padding(
+                  padding: EdgeInsets.all(8),
+                  child: CircularProgressIndicator()))
+          : content,
     );
   }
 
@@ -193,7 +247,9 @@ class _ActionBar extends StatelessWidget {
           children: [
             Expanded(
               child: OutlinedButton(
-                style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.urgent), foregroundColor: AppColors.urgent),
+                style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.urgent),
+                    foregroundColor: AppColors.urgent),
                 onPressed: onReject,
                 child: const Text('Reject'),
               ),
@@ -233,7 +289,8 @@ class _ActionBar extends StatelessWidget {
                 onPressed: () => onConfirmAndChangeStatus(
                   'CUSTOMER_UNAVAILABLE',
                   title: 'Customer unavailable?',
-                  message: 'This marks the visit as unable to proceed — office will follow up.',
+                  message:
+                      'This marks the visit as unable to proceed — office will follow up.',
                   confirmLabel: 'Mark Unavailable',
                 ),
                 child: const Text('Customer N/A'),
@@ -253,7 +310,10 @@ class _ActionBar extends StatelessWidget {
 
       case 'INSPECTION_STARTED':
         return FilledButton.icon(
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => InspectionFormScreen(jobId: job.id))).then((_) => onReload()),
+          onPressed: () => Navigator.of(context)
+              .push(MaterialPageRoute(
+                  builder: (_) => InspectionFormScreen(jobId: job.id)))
+              .then((_) => onReload()),
           icon: const Icon(Icons.fact_check_outlined, size: 18),
           label: const Text('Enter Inspection Details'),
         );
@@ -267,22 +327,56 @@ class _ActionBar extends StatelessWidget {
 
       case 'WORK_STARTED':
       case 'WORK_IN_PROGRESS':
-        return Row(
+        return Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => WorkProgressScreen(jobId: job.id))).then((_) => onReload()),
-                icon: const Icon(Icons.edit_note, size: 18),
-                label: const Text('Work Progress'),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context)
+                        .push(MaterialPageRoute(
+                            builder: (_) => WorkProgressScreen(jobId: job.id)))
+                        .then((_) => onReload()),
+                    icon: const Icon(Icons.edit_note, size: 18),
+                    label: const Text('Work Progress'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.of(context)
+                        .push(MaterialPageRoute(
+                            builder: (_) => CompletionScreen(jobId: job.id)))
+                        .then((_) => onReload()),
+                    icon: const Icon(Icons.task_alt, size: 18),
+                    label: const Text('Complete'),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CompletionScreen(jobId: job.id))).then((_) => onReload()),
-                icon: const Icon(Icons.task_alt, size: 18),
-                label: const Text('Complete'),
-              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context)
+                        .push(MaterialPageRoute(
+                            builder: (_) => PartsEntryScreen(jobId: job.id)))
+                        .then((_) => onReload()),
+                    icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                    label: const Text('Parts Used'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onMarkPartsPending,
+                    icon: const Icon(Icons.hourglass_empty, size: 18),
+                    label: const Text('Waiting For Parts'),
+                  ),
+                ),
+              ],
             ),
           ],
         );
@@ -358,25 +452,39 @@ class _JobDetailBody extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(child: Text(job.serviceName ?? 'Service Request', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17))),
+                  Expanded(
+                      child: Text(job.serviceName ?? 'Service Request',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 17))),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(color: accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-                    child: Text(jobStatusLabel(job.status), style: TextStyle(color: accent, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20)),
+                    child: Text(jobStatusLabel(job.status),
+                        style: TextStyle(
+                            color: accent,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600)),
                   ),
                 ],
               ),
               const SizedBox(height: 4),
-              Text('#${job.number}', style: TextStyle(color: secondaryTextColor(context), fontSize: 12.5)),
+              Text('#${job.number}',
+                  style: TextStyle(
+                      color: secondaryTextColor(context), fontSize: 12.5)),
               if (job.scheduledDate != null) ...[
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Icon(Icons.schedule, size: 16, color: AppColors.slate500),
+                    const Icon(Icons.schedule,
+                        size: 16, color: AppColors.slate500),
                     const SizedBox(width: 6),
                     Text(
                       '${job.scheduledDate!.day}/${job.scheduledDate!.month}/${job.scheduledDate!.year}${job.scheduledSlot != null ? ' • ${job.scheduledSlot}' : ''}',
-                      style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+                      style: const TextStyle(
+                          fontSize: 13.5, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -389,20 +497,35 @@ class _JobDetailBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Customer', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+              const Text('Customer',
+                  style:
+                      TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
               const SizedBox(height: 10),
-              Row(children: [const Icon(Icons.person_outline, size: 17, color: AppColors.slate500), const SizedBox(width: 8), Text(job.customerName ?? '—')]),
+              Row(children: [
+                const Icon(Icons.person_outline,
+                    size: 17, color: AppColors.slate500),
+                const SizedBox(width: 8),
+                Text(job.customerName ?? '—')
+              ]),
               if (job.customerMobile != null) ...[
                 const SizedBox(height: 8),
-                Row(children: [const Icon(Icons.call_outlined, size: 17, color: AppColors.slate500), const SizedBox(width: 8), Text(job.customerMobile!)]),
+                Row(children: [
+                  const Icon(Icons.call_outlined,
+                      size: 17, color: AppColors.slate500),
+                  const SizedBox(width: 8),
+                  Text(job.customerMobile!)
+                ]),
               ],
               const SizedBox(height: 8),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.location_on_outlined, size: 17, color: AppColors.slate500),
+                  const Icon(Icons.location_on_outlined,
+                      size: 17, color: AppColors.slate500),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(job.addressLine.isEmpty ? '—' : job.addressLine)),
+                  Expanded(
+                      child: Text(
+                          job.addressLine.isEmpty ? '—' : job.addressLine)),
                 ],
               ),
             ],
@@ -417,31 +540,52 @@ class _JobDetailBody extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Appliance', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                    const Text('Appliance',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 13.5)),
                     if (job.product!.warrantyExpiresAt != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: (job.product!.isUnderWarranty ? AppColors.success : AppColors.slate500).withValues(alpha: 0.1),
+                          color: (job.product!.isUnderWarranty
+                                  ? AppColors.success
+                                  : AppColors.slate500)
+                              .withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          job.product!.isUnderWarranty ? 'Under Warranty' : 'Warranty Expired',
-                          style: TextStyle(color: job.product!.isUnderWarranty ? AppColors.success : AppColors.slate500, fontSize: 10.5, fontWeight: FontWeight.bold),
+                          job.product!.isUnderWarranty
+                              ? 'Under Warranty'
+                              : 'Warranty Expired',
+                          style: TextStyle(
+                              color: job.product!.isUnderWarranty
+                                  ? AppColors.success
+                                  : AppColors.slate500,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold),
                         ),
                       ),
                   ],
                 ),
                 const SizedBox(height: 10),
-                if (job.product!.brand != null || job.product!.productType != null)
+                if (job.product!.brand != null ||
+                    job.product!.productType != null)
                   Row(children: [
-                    const Icon(Icons.category_outlined, size: 17, color: AppColors.slate500),
+                    const Icon(Icons.category_outlined,
+                        size: 17, color: AppColors.slate500),
                     const SizedBox(width: 8),
-                    Text([job.product!.brand, job.product!.productType].where((s) => s != null).join(' • ')),
+                    Text([job.product!.brand, job.product!.productType]
+                        .where((s) => s != null)
+                        .join(' • ')),
                   ]),
                 if (job.product!.modelNumber != null) ...[
                   const SizedBox(height: 8),
-                  Row(children: [const Icon(Icons.tag, size: 17, color: AppColors.slate500), const SizedBox(width: 8), Text('Model: ${job.product!.modelNumber}')]),
+                  Row(children: [
+                    const Icon(Icons.tag, size: 17, color: AppColors.slate500),
+                    const SizedBox(width: 8),
+                    Text('Model: ${job.product!.modelNumber}')
+                  ]),
                 ],
               ],
             ),
@@ -453,7 +597,9 @@ class _JobDetailBody extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Issue Reported', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                const Text('Issue Reported',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
                 const SizedBox(height: 10),
                 if (job.symptoms.isNotEmpty)
                   Wrap(
@@ -461,15 +607,22 @@ class _JobDetailBody extends StatelessWidget {
                     runSpacing: 8,
                     children: job.symptoms
                         .map((s) => Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(color: subtleSurfaceColor(context), borderRadius: BorderRadius.circular(20)),
-                              child: Text(s, style: const TextStyle(fontSize: 12.5)),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                  color: subtleSurfaceColor(context),
+                                  borderRadius: BorderRadius.circular(20)),
+                              child: Text(s,
+                                  style: const TextStyle(fontSize: 12.5)),
                             ))
                         .toList(),
                   ),
                 if (job.notes?.isNotEmpty ?? false) ...[
                   const SizedBox(height: 10),
-                  Text(job.notes!, style: TextStyle(color: strongSecondaryTextColor(context), height: 1.4)),
+                  Text(job.notes!,
+                      style: TextStyle(
+                          color: strongSecondaryTextColor(context),
+                          height: 1.4)),
                 ],
               ],
             ),
@@ -481,7 +634,9 @@ class _JobDetailBody extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Photos', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                const Text('Photos',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
                 const SizedBox(height: 10),
                 SizedBox(
                   height: 84,
@@ -491,8 +646,16 @@ class _JobDetailBody extends StatelessWidget {
                     separatorBuilder: (_, __) => const SizedBox(width: 8),
                     itemBuilder: (context, i) => ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: Image.network(job.images[i], width: 84, height: 84, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(width: 84, height: 84, color: subtleSurfaceColor(context), child: const Icon(Icons.broken_image_outlined, color: AppColors.slate400))),
+                      child: Image.network(job.images[i],
+                          width: 84,
+                          height: 84,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                              width: 84,
+                              height: 84,
+                              color: subtleSurfaceColor(context),
+                              child: const Icon(Icons.broken_image_outlined,
+                                  color: AppColors.slate400))),
                     ),
                   ),
                 ),

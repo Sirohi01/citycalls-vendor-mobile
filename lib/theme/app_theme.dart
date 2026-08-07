@@ -302,14 +302,3 @@ class GlassCard extends StatelessWidget {
     );
   }
 }
-
-// Kept for any call site still using the old flat (non-blurred) decoration —
-// prefer GlassCard for new/updated screens.
-BoxDecoration glassCardDecoration({double radius = 18}) {
-  return BoxDecoration(
-    color: Colors.white.withValues(alpha: 0.7),
-    borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
-    boxShadow: [BoxShadow(color: AppColors.slate900.withValues(alpha: 0.06), blurRadius: 20, offset: const Offset(0, 8))],
-  );
-}

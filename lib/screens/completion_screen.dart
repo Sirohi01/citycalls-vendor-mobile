@@ -1,14 +1,18 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
+import 'signature_capture_screen.dart';
 
 // Per docs/rohit/06-vendor-app-screen-list.md "Execution" — Completion screen
-// (remarks + OTP/signature capture). Signature capture isn't built (would
-// need a signature-pad package not yet in this app) — OTP (sent to the
-// customer's phone, verified here) and a manual "app confirmation" fallback
-// (for when the customer's phone is unreachable) are the two completion-proof
-// paths per completeVisitSchema's COMPLETION_PROOF_TYPES.
+// (remarks + OTP/signature capture). Three completion-proof paths per
+// completeVisitSchema's COMPLETION_PROOF_TYPES: OTP (sent to the customer's
+// phone, verified here), SIGNATURE (captured on-device, uploaded like any
+// other job image), and a manual "app confirmation" fallback for when the
+// customer's phone is unreachable.
 class CompletionScreen extends ConsumerStatefulWidget {
   final String jobId;
   const CompletionScreen({super.key, required this.jobId});
@@ -59,6 +63,33 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
       final otp = _otpController.text.trim();
       await repo.verifyCompletionOtp(widget.jobId, otp);
       await repo.completeVisit(widget.jobId, proofType: 'OTP', value: otp);
+      await _markServiceCompleted();
+      ref.invalidate(jobDetailProvider(widget.jobId));
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      setState(() => _error = 'Could not complete: $e');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _completeWithSignature() async {
+    final bytes = await Navigator.of(context).push<Uint8List>(
+      MaterialPageRoute(builder: (_) => const SignatureCaptureScreen()),
+    );
+    if (bytes == null) return;
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(jobRepositoryProvider);
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/signature_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(bytes);
+      final url = await repo.uploadJobImage(widget.jobId, file, category: 'SIGNATURE');
+      await repo.completeVisit(widget.jobId, proofType: 'SIGNATURE', url: url);
       await _markServiceCompleted();
       ref.invalidate(jobDetailProvider(widget.jobId));
       if (mounted) Navigator.of(context).pop();
@@ -140,6 +171,14 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
             ),
           ),
           const SizedBox(height: 24),
+          if (!_otpRequested) ...[
+            OutlinedButton.icon(
+              onPressed: _submitting ? null : _completeWithSignature,
+              icon: const Icon(Icons.draw_outlined, size: 18),
+              label: const Text('Complete with Customer Signature Instead'),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (!_otpRequested)
             FilledButton.icon(
               onPressed: _requestingOtp ? null : _requestOtp,

@@ -146,6 +146,8 @@ class JobDetail {
   final String? serviceName;
   final String? customerName;
   final String? customerMobile;
+  final String customerId;
+  final String branchId;
   final String addressLine;
   final List<String> symptoms;
   final String? notes;
@@ -163,6 +165,8 @@ class JobDetail {
     this.serviceName,
     this.customerName,
     this.customerMobile,
+    required this.customerId,
+    required this.branchId,
     required this.addressLine,
     required this.symptoms,
     this.notes,
@@ -195,6 +199,8 @@ class JobDetail {
       serviceName: service?['name'] as String?,
       customerName: customer?['name'] as String?,
       customerMobile: customer?['mobile'] as String?,
+      customerId: json['customerId'] as String,
+      branchId: json['branchId'] as String,
       addressLine: addressParts,
       symptoms: (json['symptoms'] as List? ?? []).cast<String>(),
       notes: json['notes'] as String?,

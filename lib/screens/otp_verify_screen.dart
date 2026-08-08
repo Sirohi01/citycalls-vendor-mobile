@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/auth_background.dart';
-import 'main_shell.dart';
+import 'role_router.dart';
 
 // Per docs/rohit/06-vendor-app-screen-list.md "Onboarding" — OTP Verify step.
 class OtpVerifyScreen extends ConsumerStatefulWidget {
@@ -28,8 +28,8 @@ class _OtpVerifyScreenState extends ConsumerState<OtpVerifyScreen> {
     final authState = ref.watch(authProvider);
 
     ref.listen(authProvider, (previous, next) {
-      if (previous?.step != AuthStep.loggedIn && next.step == AuthStep.loggedIn) {
-        Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const MainShell()), (route) => false);
+      if (previous?.step != AuthStep.loggedIn && next.step == AuthStep.loggedIn && next.user != null) {
+        Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => homeScreenForUser(next.user!)), (route) => false);
       }
     });
 

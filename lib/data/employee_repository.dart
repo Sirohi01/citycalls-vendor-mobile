@@ -11,6 +11,14 @@ class EmployeeRepository {
     return EmployeeProfile.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
+  // VENDOR_TECHNICIAN has no Employee record — a parallel self-profile
+  // fetch, adapted to the same EmployeeProfile shape so Dashboard/Profile
+  // screens don't need role-specific rendering logic.
+  Future<EmployeeProfile> getOwnVendorTechnicianProfile() async {
+    final res = await _client.dio.get('/vendor-technicians/me');
+    return EmployeeProfile.fromVendorTechnicianJson(res.data['data'] as Map<String, dynamic>);
+  }
+
   Future<void> registerFcmToken(String token) async {
     await _client.dio.post('/employees/me/fcm-token', data: {'token': token});
   }

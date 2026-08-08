@@ -75,11 +75,17 @@ class ProfileScreen extends ConsumerWidget {
                   children: [
                     const Text('Work Assignment', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
                     const SizedBox(height: 12),
-                    _InfoRow(icon: Icons.store_outlined, label: 'Branch', value: p.branchName ?? 'Not assigned'),
+                    _InfoRow(
+                      icon: p.isVendorTechnician ? Icons.business_outlined : Icons.store_outlined,
+                      label: p.isVendorTechnician ? 'Vendor Company' : 'Branch',
+                      value: p.branchName ?? 'Not assigned',
+                    ),
                     if (p.subBranchName != null) ...[const SizedBox(height: 10), _InfoRow(icon: Icons.account_tree_outlined, label: 'Sub-Branch', value: p.subBranchName!)],
                     if (p.teamName != null) ...[const SizedBox(height: 10), _InfoRow(icon: Icons.groups_outlined, label: 'Team', value: p.teamName!)],
-                    const SizedBox(height: 10),
-                    _InfoRow(icon: Icons.event_available_outlined, label: 'Daily Job Capacity', value: '${p.dailyCapacity} jobs/day'),
+                    if (!p.isVendorTechnician) ...[
+                      const SizedBox(height: 10),
+                      _InfoRow(icon: Icons.event_available_outlined, label: 'Daily Job Capacity', value: '${p.dailyCapacity} jobs/day'),
+                    ],
                   ],
                 ),
               ),
@@ -133,8 +139,10 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                 ),
               ],
-              const SizedBox(height: 16),
-              _AvailabilitySection(availability: p.availability),
+              if (!p.isVendorTechnician) ...[
+                const SizedBox(height: 16),
+                _AvailabilitySection(availability: p.availability),
+              ],
               const SizedBox(height: 16),
               const _AppearanceSection(),
               const SizedBox(height: 16),

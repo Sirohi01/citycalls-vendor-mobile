@@ -7,14 +7,16 @@ class AuthUser {
   final String id;
   final String name;
   final String role;
+  final String? vendorId;
 
-  AuthUser({required this.id, required this.name, required this.role});
+  AuthUser({required this.id, required this.name, required this.role, this.vendorId});
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     return AuthUser(
       id: json['id'] as String,
       name: json['name'] as String,
       role: json['role'] as String,
+      vendorId: json['vendorId'] as String?,
     );
   }
 
@@ -26,12 +28,17 @@ class AuthUser {
       id: json['_id'] as String,
       name: json['name'] as String,
       role: json['role'] as String,
+      vendorId: json['vendorId'] as String?,
     );
   }
 
   // Per docs/manish/09-vendor-app-functional-plan.md §6: this app serves both
-  // Employee and Vendor Technician roles from one binary.
+  // Employee and Vendor Technician roles from one binary. VENDOR_TECHNICIAN
+  // is a field role like EMPLOYEE/TECHNICIAN (same execution screens);
+  // VENDOR_OWNER/VENDOR_MANAGER are company management roles instead — they
+  // don't do field work, so they get a distinct shell (see role_router.dart).
   bool get isVendorRole => role.startsWith('VENDOR_');
+  bool get isVendorManagement => role == 'VENDOR_OWNER' || role == 'VENDOR_MANAGER';
 }
 
 class LoginResponse {

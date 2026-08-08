@@ -4,11 +4,13 @@ import '../models/employee_models.dart';
 import '../models/job_models.dart';
 import '../providers/employee_providers.dart';
 import '../providers/job_providers.dart';
+import '../providers/notification_providers.dart';
 import '../providers/sync_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glow_blob.dart';
 import 'job_detail_screen.dart';
 import 'my_jobs_screen.dart';
+import 'notification_center_screen.dart';
 import 'sync_status_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -263,27 +265,35 @@ class _Header extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    profile.when(
-                      data: (p) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Good to see you',
-                              style: TextStyle(
-                                  color: Colors.white70, fontSize: 13)),
-                          const SizedBox(height: 3),
-                          Text(p.name,
-                              style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white)),
-                        ],
-                      ),
-                      loading: () => const SizedBox(height: 44),
-                      error: (_, __) => const Text('Hi there',
-                          style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white)),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: profile.when(
+                            data: (p) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Good to see you',
+                                    style: TextStyle(
+                                        color: Colors.white70, fontSize: 13)),
+                                const SizedBox(height: 3),
+                                Text(p.name,
+                                    style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white)),
+                              ],
+                            ),
+                            loading: () => const SizedBox(height: 44),
+                            error: (_, __) => const Text('Hi there',
+                                style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white)),
+                          ),
+                        ),
+                        const _NotificationBell(),
+                      ],
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -315,6 +325,43 @@ class _Header extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _NotificationBell extends ConsumerWidget {
+  const _NotificationBell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unread = ref.watch(unreadNotificationCountProvider).value ?? 0;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+          onPressed: () {
+            Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const NotificationCenterScreen()))
+                .then((_) => ref.invalidate(unreadNotificationCountProvider));
+          },
+        ),
+        if (unread > 0)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(color: AppColors.urgent, borderRadius: BorderRadius.circular(10)),
+              constraints: const BoxConstraints(minWidth: 16),
+              child: Text(
+                unread > 9 ? '9+' : '$unread',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

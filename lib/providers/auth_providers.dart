@@ -16,13 +16,12 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(ref.watch(apiClientProvider));
 });
 
-// Only these roles have the Employee record + scoping this app is actually
-// built against ('/employees/me', assigneeType EMPLOYEE) — VENDOR_OWNER/
-// VENDOR_MANAGER/VENDOR_TECHNICIAN exist as roles in the backend (outsourced
-// partners, keyed off VendorModel not EmployeeModel) but nothing in this app
-// resolves a Vendor's own profile/jobs yet, so they're deliberately rejected
-// here with a clear message rather than silently landing in a broken app.
-const _supportedRoles = {'EMPLOYEE', 'TECHNICIAN'};
+// Per docs/manish/09-vendor-app-functional-plan.md §6: this binary serves
+// Employee and Vendor Technician roles (same execution screens, scoped by
+// assigneeType EMPLOYEE vs VENDOR server-side) — VENDOR_OWNER/VENDOR_MANAGER
+// are a distinct, non-field-work role (company roster/dashboard/payouts,
+// see role_router.dart) but log into the same app.
+const _supportedRoles = {'EMPLOYEE', 'TECHNICIAN', 'VENDOR_OWNER', 'VENDOR_MANAGER', 'VENDOR_TECHNICIAN'};
 
 enum AuthStep { enterMobile, otpSent, loggedIn }
 

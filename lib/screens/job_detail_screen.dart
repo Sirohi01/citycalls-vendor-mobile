@@ -6,6 +6,8 @@ import '../theme/app_theme.dart';
 import 'inspection_form_screen.dart';
 import 'work_progress_screen.dart';
 import 'parts_entry_screen.dart';
+import 'estimate_form_screen.dart';
+import 'invoice_screen.dart';
 import 'completion_screen.dart';
 
 class JobDetailScreen extends ConsumerStatefulWidget {
@@ -127,9 +129,10 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
         ],
       ),
     );
-    if (reason != null)
+    if (reason != null) {
       await _changeStatus('REASSIGNMENT_REQUIRED',
           reason: reason.isEmpty ? 'Rejected by technician' : reason);
+    }
   }
 
   @override
@@ -319,6 +322,29 @@ class _ActionBar extends StatelessWidget {
         );
 
       case 'INSPECTION_COMPLETED':
+        return Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => EstimateFormScreen(job: job)))
+                    .then((_) => onReload()),
+                icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                label: const Text('Create Estimate'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => onChangeStatus('WORK_STARTED'),
+                icon: const Icon(Icons.build_outlined, size: 18),
+                label: const Text('Start Work'),
+              ),
+            ),
+          ],
+        );
+
+      case 'ESTIMATE_APPROVED':
         return FilledButton.icon(
           onPressed: () => onChangeStatus('WORK_STARTED'),
           icon: const Icon(Icons.build_outlined, size: 18),
@@ -410,24 +436,13 @@ class _ActionBar extends StatelessWidget {
         );
 
       case 'PAYMENT_PENDING':
-        return Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => onChangeStatus('PARTIALLY_PAID'),
-                child: const Text('Partially Paid'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: FilledButton.icon(
-                onPressed: () => onChangeStatus('PAID'),
-                icon: const Icon(Icons.check_circle_outline, size: 18),
-                label: const Text('Mark Fully Paid'),
-              ),
-            ),
-          ],
+      case 'PARTIALLY_PAID':
+        return FilledButton.icon(
+          onPressed: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => InvoiceScreen(job: job)))
+              .then((_) => onReload()),
+          icon: const Icon(Icons.receipt_long_outlined, size: 18),
+          label: const Text('Invoice & Payment'),
         );
 
       default:

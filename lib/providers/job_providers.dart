@@ -1,11 +1,26 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/job_repository.dart';
+import '../data/estimate_repository.dart';
+import '../data/invoice_repository.dart';
 import '../models/job_models.dart';
+import '../models/invoice_models.dart';
 import 'auth_providers.dart';
 import 'sync_providers.dart';
 
 final jobRepositoryProvider = Provider<JobRepository>((ref) {
   return JobRepository(ref.watch(apiClientProvider), ref.watch(syncRepositoryProvider), ref.watch(syncEngineProvider));
+});
+
+final estimateRepositoryProvider = Provider<EstimateRepository>((ref) {
+  return EstimateRepository(ref.watch(apiClientProvider));
+});
+
+final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
+  return InvoiceRepository(ref.watch(apiClientProvider));
+});
+
+final invoiceForRequestProvider = FutureProvider.family<Invoice?, String>((ref, serviceRequestId) {
+  return ref.watch(invoiceRepositoryProvider).getInvoiceForRequest(serviceRequestId);
 });
 
 // "Active route" — everything not yet in a completed/closed/cancelled state.

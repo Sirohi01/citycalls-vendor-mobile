@@ -29,6 +29,12 @@ class EmployeeProfile {
   final List<AvailabilityDay> availability;
   final int dailyCapacity;
   final bool active;
+  // True when this profile actually came from GET /vendor-technicians/me
+  // rather than GET /employees/me — a VendorTechnician record has no
+  // sub-branch/team/dailyCapacity/certifications/availability concept at
+  // all, so profile_screen.dart uses this to skip rendering those sections
+  // rather than showing misleading defaults.
+  final bool isVendorTechnician;
 
   EmployeeProfile({
     required this.id,
@@ -43,6 +49,7 @@ class EmployeeProfile {
     required this.availability,
     required this.dailyCapacity,
     required this.active,
+    this.isVendorTechnician = false,
   });
 
   factory EmployeeProfile.fromJson(Map<String, dynamic> json) {
@@ -63,6 +70,28 @@ class EmployeeProfile {
       availability: (json['availability'] as List? ?? []).map((a) => AvailabilityDay.fromJson(a as Map<String, dynamic>)).toList(),
       dailyCapacity: (json['dailyCapacity'] as num?)?.toInt() ?? 5,
       active: json['active'] as bool? ?? true,
+    );
+  }
+
+  // GET /vendor-technicians/me shape (vendors.service.ts's
+  // getOwnVendorTechnician): {_id, userId: {name,mobile,email},
+  // vendorId: {companyName}, skills, active} — no branch/team/capacity/
+  // certifications/availability fields exist on this model.
+  factory EmployeeProfile.fromVendorTechnicianJson(Map<String, dynamic> json) {
+    final user = json['userId'] as Map<String, dynamic>?;
+    final vendor = json['vendorId'] as Map<String, dynamic>?;
+    return EmployeeProfile(
+      id: json['_id'] as String,
+      name: user?['name'] as String? ?? 'Technician',
+      mobile: user?['mobile'] as String?,
+      email: user?['email'] as String?,
+      branchName: vendor?['companyName'] as String?,
+      skills: (json['skills'] as List? ?? []).cast<String>(),
+      certifications: const [],
+      availability: const [],
+      dailyCapacity: 0,
+      active: json['active'] as bool? ?? true,
+      isVendorTechnician: true,
     );
   }
 }

@@ -4,7 +4,7 @@ import '../providers/auth_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glow_blob.dart';
 import 'otp_request_screen.dart';
-import 'main_shell.dart';
+import 'role_router.dart';
 
 // App entry point (set as MaterialApp's `home` in main.dart). Decides where
 // to land the technician — MainShell if a saved access token still resolves
@@ -50,9 +50,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     if (remaining > Duration.zero) await Future.delayed(remaining);
 
     if (!mounted) return;
-    final loggedIn = ref.read(authProvider).user != null;
+    final user = ref.read(authProvider).user;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => loggedIn ? const MainShell() : const OtpRequestScreen()),
+      MaterialPageRoute(builder: (_) => user != null ? homeScreenForUser(user) : const OtpRequestScreen()),
       (route) => false,
     );
   }

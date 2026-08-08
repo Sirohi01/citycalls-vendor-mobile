@@ -3,6 +3,11 @@
          android/app/src/debug/AndroidManifest.xml) — without this, release
          builds have no network access at all. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Live-location dashboard card (Dashboard screen) — foreground-only,
+         no background tracking, matches the docs' "event-based, not
+         continuous background GPS" position on location granularity. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
         android:label="CityCalls Field"
         android:name="${applicationName}"

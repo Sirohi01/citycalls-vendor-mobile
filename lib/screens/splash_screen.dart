@@ -17,24 +17,36 @@ class SplashScreen extends ConsumerStatefulWidget {
   ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _fade;
   late final Animation<double> _scale;
+  late final Animation<double> _taglineFade;
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulse;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
-    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
-    _scale = Tween<double>(begin: 0.9, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+    _fade = CurvedAnimation(parent: _controller, curve: const Interval(0, 0.6, curve: Curves.easeOut));
+    _scale = Tween<double>(begin: 0.9, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: const Interval(0, 0.7, curve: Curves.easeOutBack)));
+    _taglineFade = CurvedAnimation(parent: _controller, curve: const Interval(0.4, 1.0, curve: Curves.easeOut));
     _controller.forward();
+
+    // Slow breathing glow behind the logo — a small "the app is alive" cue
+    // during the (usually sub-second) session-restore wait, echoing the same
+    // pulsing-dot language used on the Dashboard's live-location marker.
+    _pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.85, end: 1.08).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
+
     _resolveDestination();
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -82,16 +94,32 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Image.asset('assets/images/logo.png', height: 104, fit: BoxFit.contain),
+                    AnimatedBuilder(
+                      animation: _pulse,
+                      builder: (context, child) => Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Transform.scale(scale: _pulse.value, child: const GlowBlob(color: AppColors.teal400, size: 150)),
+                          child!,
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Image.asset('assets/images/logo.png', height: 104, fit: BoxFit.contain),
+                      ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     const Text('CityCalls Field', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                     const SizedBox(height: 6),
-                    const Text('For technicians & field partners', style: TextStyle(color: AppColors.slate400, fontSize: 13.5)),
+                    FadeTransition(
+                      opacity: _taglineFade,
+                      child: const Text('For technicians & field partners', style: TextStyle(color: AppColors.slate400, fontSize: 13.5)),
+                    ),
                     const SizedBox(height: 36),
-                    const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.teal400)),
+                    FadeTransition(
+                      opacity: _taglineFade,
+                      child: const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.teal400)),
+                    ),
                   ],
                 ),
               ),

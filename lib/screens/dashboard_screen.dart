@@ -8,6 +8,7 @@ import '../providers/notification_providers.dart';
 import '../providers/sync_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glow_blob.dart';
+import '../widgets/live_location_card.dart';
 import 'job_detail_screen.dart';
 import 'my_jobs_screen.dart';
 import 'notification_center_screen.dart';
@@ -52,6 +53,10 @@ class DashboardScreen extends ConsumerWidget {
                 loading: () => const SizedBox.shrink(),
                 error: (_, __) => const SizedBox.shrink(),
               ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: LiveLocationCard(),
             ),
             Consumer(
               builder: (context, ref, _) {

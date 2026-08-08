@@ -45,5 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>CityCalls Field shows your current location on the dashboard map and shares it with the customer while you're en route to a job.</string>
 </dict>
 </plist>

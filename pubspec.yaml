@@ -52,6 +52,12 @@ dependencies:
   firebase_core: ^3.8.0
   firebase_messaging: ^15.1.6
   signature: ^5.5.0
+  fl_chart: ^0.69.2
+  # OpenStreetMap tiles — no API key/billing setup needed, unlike Google Maps,
+  # so the live-location card works immediately without an external account.
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  geolocator: ^13.0.2
 
 dev_dependencies:
   flutter_test:

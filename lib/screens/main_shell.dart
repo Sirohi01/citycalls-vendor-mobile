@@ -48,7 +48,10 @@ class _MainShellState extends ConsumerState<MainShell> {
     });
 
     return Scaffold(
-      body: IndexedStack(index: _index, children: _screens),
+      body: IndexedStack(
+        index: _index,
+        children: _screens,
+      ),
       extendBody: false,
       bottomNavigationBar: SafeArea(
         top: false,

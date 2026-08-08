@@ -54,7 +54,10 @@ class _VendorOwnerShellState extends ConsumerState<VendorOwnerShell> {
           ),
         ],
       ),
-      body: IndexedStack(index: _index, children: _screens),
+      body: KeyedSubtree(
+        key: ValueKey(_index),
+        child: _screens[_index],
+      ),
       extendBody: false,
       bottomNavigationBar: SafeArea(
         top: false,

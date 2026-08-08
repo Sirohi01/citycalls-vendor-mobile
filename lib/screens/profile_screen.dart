@@ -50,20 +50,46 @@ class ProfileScreen extends ConsumerWidget {
                     Container(
                       width: 76,
                       height: 76,
-                      decoration: const BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [AppColors.primary, AppColors.primaryDark])),
-                      child: Center(child: Text(_initials(p.name), style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold))),
+                      decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(colors: [
+                            AppColors.primary,
+                            AppColors.primaryDark
+                          ])),
+                      child: Center(
+                          child: Text(_initials(p.name),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.bold))),
                     ),
                     const SizedBox(height: 14),
-                    Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    Text(p.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 18)),
                     if (p.mobile != null) ...[
                       const SizedBox(height: 3),
-                      Text(p.mobile!, style: TextStyle(color: secondaryTextColor(context), fontSize: 13)),
+                      Text(p.mobile!,
+                          style: TextStyle(
+                              color: secondaryTextColor(context),
+                              fontSize: 13)),
                     ],
                     const SizedBox(height: 10),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                      decoration: BoxDecoration(color: p.active ? AppColors.success.withValues(alpha: 0.1) : AppColors.slate500.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-                      child: Text(p.active ? 'Active' : 'Inactive', style: TextStyle(color: p.active ? AppColors.success : AppColors.slate500, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 5),
+                      decoration: BoxDecoration(
+                          color: p.active
+                              ? AppColors.success.withValues(alpha: 0.1)
+                              : AppColors.slate500.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20)),
+                      child: Text(p.active ? 'Active' : 'Inactive',
+                          style: TextStyle(
+                              color: p.active
+                                  ? AppColors.success
+                                  : AppColors.slate500,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600)),
                     ),
                   ],
                 ),
@@ -73,18 +99,37 @@ class ProfileScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Work Assignment', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                    const Text('Work Assignment',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 13.5)),
                     const SizedBox(height: 12),
                     _InfoRow(
-                      icon: p.isVendorTechnician ? Icons.business_outlined : Icons.store_outlined,
+                      icon: p.isVendorTechnician
+                          ? Icons.business_outlined
+                          : Icons.store_outlined,
                       label: p.isVendorTechnician ? 'Vendor Company' : 'Branch',
                       value: p.branchName ?? 'Not assigned',
                     ),
-                    if (p.subBranchName != null) ...[const SizedBox(height: 10), _InfoRow(icon: Icons.account_tree_outlined, label: 'Sub-Branch', value: p.subBranchName!)],
-                    if (p.teamName != null) ...[const SizedBox(height: 10), _InfoRow(icon: Icons.groups_outlined, label: 'Team', value: p.teamName!)],
+                    if (p.subBranchName != null) ...[
+                      const SizedBox(height: 10),
+                      _InfoRow(
+                          icon: Icons.account_tree_outlined,
+                          label: 'Sub-Branch',
+                          value: p.subBranchName!)
+                    ],
+                    if (p.teamName != null) ...[
+                      const SizedBox(height: 10),
+                      _InfoRow(
+                          icon: Icons.groups_outlined,
+                          label: 'Team',
+                          value: p.teamName!)
+                    ],
                     if (!p.isVendorTechnician) ...[
                       const SizedBox(height: 10),
-                      _InfoRow(icon: Icons.event_available_outlined, label: 'Daily Job Capacity', value: '${p.dailyCapacity} jobs/day'),
+                      _InfoRow(
+                          icon: Icons.event_available_outlined,
+                          label: 'Daily Job Capacity',
+                          value: '${p.dailyCapacity} jobs/day'),
                     ],
                   ],
                 ),
@@ -95,16 +140,29 @@ class ProfileScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Skills', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                      const Text('Skills',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 13.5)),
                       const SizedBox(height: 10),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: p.skills
                             .map((s) => Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer, borderRadius: BorderRadius.circular(20)),
-                                  child: Text(s, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onPrimaryContainer, fontWeight: FontWeight.w600)),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primaryContainer,
+                                      borderRadius: BorderRadius.circular(20)),
+                                  child: Text(s,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onPrimaryContainer,
+                                          fontWeight: FontWeight.w600)),
                                 ))
                             .toList(),
                       ),
@@ -118,20 +176,33 @@ class ProfileScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Certifications', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                      const Text('Certifications',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 13.5)),
                       const SizedBox(height: 10),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: p.certifications
                             .map((c) => Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-                                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                    const Icon(Icons.verified_outlined, size: 13, color: AppColors.success),
-                                    const SizedBox(width: 4),
-                                    Text(c, style: const TextStyle(fontSize: 12, color: AppColors.success, fontWeight: FontWeight.w600)),
-                                  ]),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                      color: AppColors.success
+                                          .withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(20)),
+                                  child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.verified_outlined,
+                                            size: 13, color: AppColors.success),
+                                        const SizedBox(width: 4),
+                                        Text(c,
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.success,
+                                                fontWeight: FontWeight.w600)),
+                                      ]),
                                 ))
                             .toList(),
                       ),
@@ -150,18 +221,26 @@ class ProfileScreen extends ConsumerWidget {
                 padding: EdgeInsets.zero,
                 child: ListTile(
                   leading: const Icon(Icons.sync, color: AppColors.primary),
-                  title: const Text('Sync Status', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
-                  subtitle: const Text('Offline actions waiting to sync', style: TextStyle(fontSize: 11.5)),
-                  trailing: const Icon(Icons.chevron_right, color: AppColors.slate400),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SyncStatusScreen())),
+                  title: const Text('Sync Status',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13.5)),
+                  subtitle: const Text('Offline actions waiting to sync',
+                      style: TextStyle(fontSize: 11.5)),
+                  trailing: const Icon(Icons.chevron_right,
+                      color: AppColors.slate400),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => const SyncStatusScreen())),
                 ),
               ),
               const SizedBox(height: 24),
               OutlinedButton.icon(
                 onPressed: () => _logout(context, ref),
-                icon: const Icon(Icons.logout, size: 18, color: AppColors.urgent),
-                label: const Text('Log Out', style: TextStyle(color: AppColors.urgent)),
-                style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.urgent)),
+                icon:
+                    const Icon(Icons.logout, size: 18, color: AppColors.urgent),
+                label: const Text('Log Out',
+                    style: TextStyle(color: AppColors.urgent)),
+                style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.urgent)),
               ),
             ],
           ),
@@ -173,15 +252,21 @@ class ProfileScreen extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.error_outline, size: 40, color: AppColors.slate400),
+                const Icon(Icons.error_outline,
+                    size: 40, color: AppColors.slate400),
                 const SizedBox(height: 12),
-                Text('Could not load profile: $err', style: const TextStyle(color: AppColors.slate500), textAlign: TextAlign.center),
+                Text('Could not load profile: $err',
+                    style: const TextStyle(color: AppColors.slate500),
+                    textAlign: TextAlign.center),
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
                   onPressed: () => _logout(context, ref),
-                  icon: const Icon(Icons.logout, size: 18, color: AppColors.urgent),
-                  label: const Text('Log Out', style: TextStyle(color: AppColors.urgent)),
-                  style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.urgent)),
+                  icon: const Icon(Icons.logout,
+                      size: 18, color: AppColors.urgent),
+                  label: const Text('Log Out',
+                      style: TextStyle(color: AppColors.urgent)),
+                  style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppColors.urgent)),
                 ),
               ],
             ),
@@ -192,17 +277,21 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts =
+        name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-    return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
   }
 
   Future<void> _logout(BuildContext context, WidgetRef ref) async {
     await ref.read(pushNotificationServiceProvider).unregisterCurrentToken();
     await ref.read(authProvider.notifier).logout();
     if (context.mounted) {
-      Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const OtpRequestScreen()), (route) => false);
+      Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const OtpRequestScreen()),
+          (route) => false);
     }
   }
 }
@@ -226,26 +315,96 @@ class _AppearanceSection extends ConsumerWidget {
             children: [
               Icon(Icons.brightness_6_outlined, size: 19),
               SizedBox(width: 8),
-              Text('Appearance', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+              Text('Appearance',
+                  style:
+                      TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
             ],
           ),
           const SizedBox(height: 6),
-          Text('Choose how CityCalls Field looks on this device.', style: TextStyle(fontSize: 11.5, color: secondaryTextColor(context))),
+          Text('Choose how CityCalls Field looks on this device.',
+              style: TextStyle(
+                  fontSize: 11.5, color: secondaryTextColor(context))),
           const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<ThemeMode>(
-              segments: const [
-                ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.settings_suggest_outlined, size: 17), label: Text('System')),
-                ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_outlined, size: 17), label: Text('Light')),
-                ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_outlined, size: 17), label: Text('Dark')),
-              ],
-              selected: {selectedMode},
-              showSelectedIcon: false,
-              onSelectionChanged: (selection) => ref.read(themeModeProvider.notifier).setMode(selection.first),
-            ),
+          _ThemeModeToggle(
+            selected: selectedMode,
+            onChanged: (mode) =>
+                ref.read(themeModeProvider.notifier).setMode(mode),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ThemeModeToggle extends StatelessWidget {
+  final ThemeMode selected;
+  final ValueChanged<ThemeMode> onChanged;
+  const _ThemeModeToggle({required this.selected, required this.onChanged});
+
+  static const _options = [
+    (
+      mode: ThemeMode.system,
+      icon: Icons.settings_suggest_outlined,
+      label: 'System'
+    ),
+    (mode: ThemeMode.light, icon: Icons.light_mode_outlined, label: 'Light'),
+    (mode: ThemeMode.dark, icon: Icons.dark_mode_outlined, label: 'Dark'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: subtleSurfaceColor(context),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: _options.map((option) {
+          final isSelected = option.mode == selected;
+          return Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onChanged(option.mode),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(9),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2))
+                        ]
+                      : null,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(option.icon,
+                        size: 17,
+                        color: isSelected
+                            ? Colors.white
+                            : secondaryTextColor(context)),
+                    const SizedBox(height: 3),
+                    Text(
+                      option.label,
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected
+                              ? Colors.white
+                              : secondaryTextColor(context)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -256,7 +415,8 @@ class _AvailabilitySection extends ConsumerStatefulWidget {
   const _AvailabilitySection({required this.availability});
 
   @override
-  ConsumerState<_AvailabilitySection> createState() => _AvailabilitySectionState();
+  ConsumerState<_AvailabilitySection> createState() =>
+      _AvailabilitySectionState();
 }
 
 class _AvailabilitySectionState extends ConsumerState<_AvailabilitySection> {
@@ -281,16 +441,21 @@ class _AvailabilitySectionState extends ConsumerState<_AvailabilitySection> {
   // to toggle off, rather than an empty section implying nothing is set up.
   List<AvailabilityDay> _normalized(List<AvailabilityDay> source) {
     if (source.isEmpty) {
-      return List.generate(7, (day) => AvailabilityDay(day: day, available: true));
+      return List.generate(
+          7, (day) => AvailabilityDay(day: day, available: true));
     }
     final byDay = {for (final d in source) d.day: d};
-    return List.generate(7, (day) => byDay[day] ?? AvailabilityDay(day: day, available: true));
+    return List.generate(
+        7, (day) => byDay[day] ?? AvailabilityDay(day: day, available: true));
   }
 
   Future<void> _toggle(int day, bool value) async {
     final previous = _days;
     setState(() {
-      _days = _days.map((d) => d.day == day ? AvailabilityDay(day: d.day, available: value) : d).toList();
+      _days = _days
+          .map((d) =>
+              d.day == day ? AvailabilityDay(day: d.day, available: value) : d)
+          .toList();
       _saving = true;
       _error = null;
     });
@@ -315,8 +480,15 @@ class _AvailabilitySectionState extends ConsumerState<_AvailabilitySection> {
         children: [
           Row(
             children: [
-              const Expanded(child: Text('Working Days', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5))),
-              if (_saving) const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+              const Expanded(
+                  child: Text('Working Days',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 13.5))),
+              if (_saving)
+                const SizedBox(
+                    height: 14,
+                    width: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
             ],
           ),
           const SizedBox(height: 8),
@@ -326,18 +498,33 @@ class _AvailabilitySectionState extends ConsumerState<_AvailabilitySection> {
                       padding: const EdgeInsets.only(top: 4),
                       child: Row(
                         children: [
-                          Expanded(child: Text(a.label, style: TextStyle(fontSize: 13, color: a.available ? Theme.of(context).colorScheme.onSurface : secondaryTextColor(context)))),
+                          Expanded(
+                              child: Text(a.label,
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: a.available
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .onSurface
+                                          : secondaryTextColor(context)))),
                           Switch(
                             value: a.available,
                             activeTrackColor: AppColors.primary,
-                            onChanged: _saving ? null : (value) => _toggle(a.day, value),
+                            onChanged: _saving
+                                ? null
+                                : (value) => _toggle(a.day, value),
                           ),
                         ],
                       ),
                     ))
                 .toList(),
           ),
-          if (_error != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_error!, style: const TextStyle(color: AppColors.urgent, fontSize: 11.5))),
+          if (_error != null)
+            Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(_error!,
+                    style: const TextStyle(
+                        color: AppColors.urgent, fontSize: 11.5))),
         ],
       ),
     );
@@ -348,7 +535,8 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _InfoRow({required this.icon, required this.label, required this.value});
+  const _InfoRow(
+      {required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -356,9 +544,11 @@ class _InfoRow extends StatelessWidget {
       children: [
         Icon(icon, size: 17, color: secondaryTextColor(context)),
         const SizedBox(width: 8),
-        Text(label, style: TextStyle(fontSize: 13, color: secondaryTextColor(context))),
+        Text(label,
+            style: TextStyle(fontSize: 13, color: secondaryTextColor(context))),
         const Spacer(),
-        Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        Text(value,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
       ],
     );
   }

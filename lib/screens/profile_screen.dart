@@ -235,11 +235,10 @@ class ProfileScreen extends ConsumerWidget {
               const SizedBox(height: 24),
               OutlinedButton.icon(
                 onPressed: () => _logout(context, ref),
-                icon:
-                    const Icon(Icons.logout, size: 18, color: AppColors.urgent),
-                label: const Text('Log Out',
-                    style: TextStyle(color: AppColors.urgent)),
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text('Log Out'),
                 style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.urgent,
                     side: const BorderSide(color: AppColors.urgent)),
               ),
             ],
@@ -261,11 +260,10 @@ class ProfileScreen extends ConsumerWidget {
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
                   onPressed: () => _logout(context, ref),
-                  icon: const Icon(Icons.logout,
-                      size: 18, color: AppColors.urgent),
-                  label: const Text('Log Out',
-                      style: TextStyle(color: AppColors.urgent)),
+                  icon: const Icon(Icons.logout, size: 18),
+                  label: const Text('Log Out'),
                   style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.urgent,
                       side: const BorderSide(color: AppColors.urgent)),
                 ),
               ],

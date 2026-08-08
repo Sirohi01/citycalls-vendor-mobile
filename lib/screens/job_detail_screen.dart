@@ -145,22 +145,26 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
       body: job.when(
         data: (j) => Stack(
           children: [
-            ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-              children: [
-                if (_error != null)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                        color: AppColors.urgent.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12)),
-                    child: Text(_error!,
-                        style: const TextStyle(
-                            color: AppColors.urgent, fontSize: 12.5)),
-                  ),
-                _JobDetailBody(job: j),
-              ],
+            RefreshIndicator(
+              onRefresh: () async =>
+                  ref.invalidate(jobDetailProvider(widget.jobId)),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                children: [
+                  if (_error != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                          color: AppColors.urgent.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: Text(_error!,
+                          style: const TextStyle(
+                              color: AppColors.urgent, fontSize: 12.5)),
+                    ),
+                  _JobDetailBody(job: j),
+                ],
+              ),
             ),
             Positioned(
               left: 0,
@@ -188,12 +192,6 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
   }
 }
 
-// One place deciding "what's the next thing this technician can do" from the
-// current status — keeps job_detail_screen.dart's build method from turning
-// into a giant if-ladder, and doubles as the single source of truth for
-// which statuses this app currently drives (anything not listed here is
-// read-only, e.g. AWAITING_CUSTOMER_APPROVAL, which needs the customer app
-// to act, not this one).
 class _ActionBar extends StatelessWidget {
   final JobDetail job;
   final bool submitting;
@@ -327,7 +325,8 @@ class _ActionBar extends StatelessWidget {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () => Navigator.of(context)
-                    .push(MaterialPageRoute(builder: (_) => EstimateFormScreen(job: job)))
+                    .push(MaterialPageRoute(
+                        builder: (_) => EstimateFormScreen(job: job)))
                     .then((_) => onReload()),
                 icon: const Icon(Icons.receipt_long_outlined, size: 18),
                 label: const Text('Create Estimate'),

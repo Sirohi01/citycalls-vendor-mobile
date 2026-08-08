@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import '../models/job_models.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
@@ -21,6 +23,44 @@ class JobDetailScreen extends ConsumerStatefulWidget {
 class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
   bool _submitting = false;
   String? _error;
+  Timer? _locationPingTimer;
+  bool _locationPingActive = false;
+
+  void _syncLocationPing(String status) {
+    final shouldPing = status == 'TECHNICIAN_EN_ROUTE';
+    if (shouldPing == _locationPingActive) return;
+    _locationPingActive = shouldPing;
+    if (shouldPing) {
+      _sendLocationPingOnce();
+      _locationPingTimer = Timer.periodic(const Duration(seconds: 20), (_) => _sendLocationPingOnce());
+    } else {
+      _locationPingTimer?.cancel();
+      _locationPingTimer = null;
+    }
+  }
+
+  Future<void> _sendLocationPingOnce() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return;
+      final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
+      await ref.read(jobRepositoryProvider).sendLocationPing(widget.jobId, position.latitude, position.longitude);
+    } catch (_) {
+      // Best-effort, same as job_repository.dart's own sendLocationPing —
+      // a failed/stale ping just gets skipped, not retried or surfaced.
+    }
+  }
+
+  @override
+  void dispose() {
+    _locationPingTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _changeStatus(String toStatus, {String? reason}) async {
     setState(() {
@@ -143,7 +183,9 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Job Details')),
       body: job.when(
-        data: (j) => Stack(
+        data: (j) {
+          _syncLocationPing(j.status);
+          return Stack(
           children: [
             RefreshIndicator(
               onRefresh: () async =>
@@ -182,7 +224,8 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
               ),
             ),
           ],
-        ),
+          );
+        },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, __) => Center(
             child: Text('Could not load this job: $err',

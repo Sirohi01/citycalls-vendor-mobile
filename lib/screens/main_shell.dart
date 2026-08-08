@@ -8,10 +8,6 @@ import 'my_jobs_screen.dart';
 import 'job_history_screen.dart';
 import 'profile_screen.dart';
 
-// Bottom-nav shell. "Sync Status"/"Sync Issues" (docs/rohit/06-vendor-app-screen-list.md
-// "Sync") is reachable from Dashboard/Profile rather than its own tab (see
-// sync_status_screen.dart) — this is also where the sync engine's
-// connectivity watcher gets started, once per app session.
 class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
@@ -22,15 +18,17 @@ class MainShell extends ConsumerStatefulWidget {
 class _MainShellState extends ConsumerState<MainShell> {
   int _index = 0;
 
-  static const _screens = [DashboardScreen(), MyJobsScreen(), JobHistoryScreen(), ProfileScreen()];
+  late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
-    // Reading (not watching) is enough — this just needs the provider to be
-    // instantiated so its connectivity listener starts; MainShell doesn't
-    // need to rebuild when sync state changes (screens that display it watch
-    // pendingActionsProvider themselves).
+    _screens = [
+      DashboardScreen(key: const PageStorageKey('dashboard')),
+      MyJobsScreen(key: const PageStorageKey('my-jobs')),
+      JobHistoryScreen(key: const PageStorageKey('job-history')),
+      ProfileScreen(key: const PageStorageKey('profile')),
+    ];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncEngineProvider).syncAll();
       ref.read(pushNotificationServiceProvider).initialize();
@@ -39,11 +37,6 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Foreground messages don't produce a system notification banner on
-    // their own (that's OS behavior for background/terminated apps only) —
-    // shown as an in-app SnackBar instead, since the technician is already
-    // looking at the app when these arrive (e.g. a new job just got assigned
-    // while they're on the Dashboard).
     ref.listen(foregroundPushMessageProvider, (previous, next) {
       final message = next.valueOrNull;
       final title = message?.notification?.title;
@@ -64,9 +57,19 @@ class _MainShellState extends ConsumerState<MainShell> {
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: Container(
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
-                border: Border(top: BorderSide(color: Theme.of(context).dividerColor, width: 1)),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: const Offset(0, -4))],
+                color: Theme.of(context)
+                    .colorScheme
+                    .surface
+                    .withValues(alpha: 0.9),
+                border: Border(
+                    top: BorderSide(
+                        color: Theme.of(context).dividerColor, width: 1)),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      blurRadius: 16,
+                      offset: const Offset(0, -4))
+                ],
               ),
               child: BottomNavigationBar(
                 currentIndex: _index,
@@ -74,10 +77,20 @@ class _MainShellState extends ConsumerState<MainShell> {
                 backgroundColor: Colors.transparent,
                 elevation: 0,
                 items: const [
-                  BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), activeIcon: Icon(Icons.dashboard), label: 'Dashboard'),
-                  BottomNavigationBarItem(icon: Icon(Icons.work_outline), activeIcon: Icon(Icons.work), label: 'My Jobs'),
-                  BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
-                  BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'Profile'),
+                  BottomNavigationBarItem(
+                      icon: Icon(Icons.dashboard_outlined),
+                      activeIcon: Icon(Icons.dashboard),
+                      label: 'Dashboard'),
+                  BottomNavigationBarItem(
+                      icon: Icon(Icons.work_outline),
+                      activeIcon: Icon(Icons.work),
+                      label: 'My Jobs'),
+                  BottomNavigationBarItem(
+                      icon: Icon(Icons.history), label: 'History'),
+                  BottomNavigationBarItem(
+                      icon: Icon(Icons.person_outline),
+                      activeIcon: Icon(Icons.person),
+                      label: 'Profile'),
                 ],
               ),
             ),

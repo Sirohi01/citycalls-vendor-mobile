@@ -32,7 +32,8 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     _locationPingActive = shouldPing;
     if (shouldPing) {
       _sendLocationPingOnce();
-      _locationPingTimer = Timer.periodic(const Duration(seconds: 20), (_) => _sendLocationPingOnce());
+      _locationPingTimer = Timer.periodic(
+          const Duration(seconds: 20), (_) => _sendLocationPingOnce());
     } else {
       _locationPingTimer?.cancel();
       _locationPingTimer = null;
@@ -47,9 +48,15 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return;
-      final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
-      await ref.read(jobRepositoryProvider).sendLocationPing(widget.jobId, position.latitude, position.longitude);
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+          locationSettings:
+              const LocationSettings(accuracy: LocationAccuracy.high));
+      await ref.read(jobRepositoryProvider).sendLocationPing(
+          widget.jobId, position.latitude, position.longitude);
     } catch (_) {
       // Best-effort, same as job_repository.dart's own sendLocationPing —
       // a failed/stale ping just gets skipped, not retried or surfaced.
@@ -186,44 +193,45 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
         data: (j) {
           _syncLocationPing(j.status);
           return Stack(
-          children: [
-            RefreshIndicator(
-              onRefresh: () async =>
-                  ref.invalidate(jobDetailProvider(widget.jobId)),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                children: [
-                  if (_error != null)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                          color: AppColors.urgent.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(12)),
-                      child: Text(_error!,
-                          style: const TextStyle(
-                              color: AppColors.urgent, fontSize: 12.5)),
-                    ),
-                  _JobDetailBody(job: j),
-                ],
+            children: [
+              RefreshIndicator(
+                onRefresh: () async =>
+                    ref.invalidate(jobDetailProvider(widget.jobId)),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                  children: [
+                    if (_error != null)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                            color: AppColors.urgent.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12)),
+                        child: Text(_error!,
+                            style: const TextStyle(
+                                color: AppColors.urgent, fontSize: 12.5)),
+                      ),
+                    _JobDetailBody(job: j),
+                  ],
+                ),
               ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _ActionBar(
-                job: j,
-                submitting: _submitting,
-                onChangeStatus: _changeStatus,
-                onStartTravel: () => _startTravel(j),
-                onMarkPartsPending: () => _markPartsPending(j),
-                onConfirmAndChangeStatus: _confirmAndChangeStatus,
-                onReject: _rejectWithReason,
-                onReload: () => ref.invalidate(jobDetailProvider(widget.jobId)),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _ActionBar(
+                  job: j,
+                  submitting: _submitting,
+                  onChangeStatus: _changeStatus,
+                  onStartTravel: () => _startTravel(j),
+                  onMarkPartsPending: () => _markPartsPending(j),
+                  onConfirmAndChangeStatus: _confirmAndChangeStatus,
+                  onReject: _rejectWithReason,
+                  onReload: () =>
+                      ref.invalidate(jobDetailProvider(widget.jobId)),
+                ),
               ),
-            ),
-          ],
+            ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -258,11 +266,26 @@ class _ActionBar extends StatelessWidget {
     required this.onReject,
     required this.onReload,
   });
+  static const _supplementaryEstimateStatuses = {
+    'ESTIMATE_APPROVED',
+    'WORK_STARTED',
+    'WORK_IN_PROGRESS',
+    'PARTS_PENDING',
+    'ON_HOLD',
+    'SERVICE_COMPLETED',
+    'CUSTOMER_CONFIRMATION_PENDING',
+    'PAYMENT_PENDING',
+    'PARTIALLY_PAID',
+  };
 
   @override
   Widget build(BuildContext context) {
     final content = _buildForStatus(context);
-    if (content == null) return const SizedBox.shrink();
+    final showSupplementaryEstimate =
+        _supplementaryEstimateStatuses.contains(job.status);
+    if (content == null && !showSupplementaryEstimate) {
+      return const SizedBox.shrink();
+    }
     return Container(
       padding: EdgeInsets.fromLTRB(
           16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
@@ -280,7 +303,27 @@ class _ActionBar extends StatelessWidget {
               child: Padding(
                   padding: EdgeInsets.all(8),
                   child: CircularProgressIndicator()))
-          : content,
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (content != null) content,
+                if (showSupplementaryEstimate)
+                  Padding(
+                    padding: EdgeInsets.only(top: content != null ? 10 : 0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
+                        onPressed: () => Navigator.of(context)
+                            .push(MaterialPageRoute(
+                                builder: (_) => EstimateFormScreen(job: job)))
+                            .then((_) => onReload()),
+                        icon: const Icon(Icons.add_circle_outline, size: 18),
+                        label: const Text('Add Additional Estimate'),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 

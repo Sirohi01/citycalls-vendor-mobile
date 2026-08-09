@@ -22,10 +22,240 @@ class InvoiceScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Invoice & Payment')),
       body: invoiceAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, __) => Center(child: Text('Could not load invoice: $err', style: const TextStyle(color: AppColors.urgent))),
+        error: (err, __) => Center(
+            child: Text('Could not load invoice: $err',
+                style: const TextStyle(color: AppColors.urgent))),
         data: (invoice) => invoice == null
-            ? _CreateInvoiceView(job: job)
+            ? _BillingRouter(job: job)
             : _PaymentView(job: job, invoice: invoice),
+      ),
+    );
+  }
+}
+
+class _BillingRouter extends ConsumerWidget {
+  final JobDetail job;
+  const _BillingRouter({required this.job});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final proformaAsync = ref.watch(proformaForRequestProvider(job.id));
+    return proformaAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, __) => Center(
+          child: Text('Could not load billing status: $err',
+              style: const TextStyle(color: AppColors.urgent))),
+      data: (proforma) {
+        if (proforma != null) {
+          return _ProformaStatusView(job: job, proforma: proforma);
+        }
+        return _GenerateFromEstimateView(job: job);
+      },
+    );
+  }
+}
+
+class _GenerateFromEstimateView extends ConsumerStatefulWidget {
+  final JobDetail job;
+  const _GenerateFromEstimateView({required this.job});
+
+  @override
+  ConsumerState<_GenerateFromEstimateView> createState() =>
+      _GenerateFromEstimateViewState();
+}
+
+class _GenerateFromEstimateViewState
+    extends ConsumerState<_GenerateFromEstimateView> {
+  bool _generating = false;
+  String? _error;
+  bool _manualOverride = false;
+
+  Future<void> _generate() async {
+    setState(() {
+      _generating = true;
+      _error = null;
+    });
+    try {
+      await ref
+          .read(invoiceRepositoryProvider)
+          .generateProformaInvoice(widget.job.id);
+      ref.invalidate(proformaForRequestProvider(widget.job.id));
+    } catch (e) {
+      setState(() => _error = 'Failed to generate bill: $e');
+    } finally {
+      if (mounted) setState(() => _generating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_manualOverride) return _CreateInvoiceView(job: widget.job);
+
+    final estimateAsync =
+        ref.watch(approvedEstimateForRequestProvider(widget.job.id));
+    return estimateAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, __) => Center(
+          child: Text('Could not check for an approved estimate: $err',
+              style: const TextStyle(color: AppColors.urgent))),
+      data: (estimate) {
+        if (estimate == null) return _CreateInvoiceView(job: widget.job);
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.receipt_long_outlined,
+                    size: 48, color: AppColors.primary),
+                const SizedBox(height: 16),
+                Text('Approved estimate ${estimate.number}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 6),
+                Text('₹${estimate.total.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary)),
+                const SizedBox(height: 8),
+                const Text(
+                  'The bill will use the exact items and amount the customer already approved. They will get one final confirmation to accept it before it becomes the invoice.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.slate500, fontSize: 12.5),
+                ),
+                const SizedBox(height: 20),
+                if (_error != null)
+                  Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(_error!,
+                          style: const TextStyle(
+                              color: AppColors.urgent, fontSize: 12.5))),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _generating ? null : _generate,
+                    icon: _generating
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.send_outlined, size: 18),
+                    label: Text(_generating
+                        ? 'Generating...'
+                        : 'Generate Bill for Customer'),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _manualOverride = true),
+                  child: const Text('Bill this differently instead'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// A proforma exists — either still waiting on the customer, or accepted and
+// ready to become the real invoice.
+class _ProformaStatusView extends ConsumerStatefulWidget {
+  final JobDetail job;
+  final ProformaInvoice proforma;
+  const _ProformaStatusView({required this.job, required this.proforma});
+
+  @override
+  ConsumerState<_ProformaStatusView> createState() =>
+      _ProformaStatusViewState();
+}
+
+class _ProformaStatusViewState extends ConsumerState<_ProformaStatusView> {
+  bool _converting = false;
+  String? _error;
+
+  Future<void> _convert() async {
+    setState(() {
+      _converting = true;
+      _error = null;
+    });
+    try {
+      await ref
+          .read(invoiceRepositoryProvider)
+          .convertProformaToInvoice(widget.proforma.id);
+      ref.invalidate(invoiceForRequestProvider(widget.job.id));
+    } catch (e) {
+      setState(() => _error = 'Failed to create the final invoice: $e');
+    } finally {
+      if (mounted) setState(() => _converting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accepted = widget.proforma.status == 'ACCEPTED';
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+                accepted
+                    ? Icons.check_circle_outline
+                    : Icons.hourglass_top_outlined,
+                size: 48,
+                color: accepted ? AppColors.success : AppColors.warning),
+            const SizedBox(height: 16),
+            Text(widget.proforma.number,
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 6),
+            Text('₹${widget.proforma.total.toStringAsFixed(0)}',
+                style:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(
+              accepted
+                  ? 'The customer accepted the bill. Create the final invoice below.'
+                  : 'Waiting for the customer to accept the bill in their app.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.slate500, fontSize: 12.5),
+            ),
+            const SizedBox(height: 20),
+            if (_error != null)
+              Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(_error!,
+                      style: const TextStyle(
+                          color: AppColors.urgent, fontSize: 12.5))),
+            if (accepted)
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _converting ? null : _convert,
+                  icon: _converting
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.receipt_outlined, size: 18),
+                  label: Text(
+                      _converting ? 'Creating...' : 'Create Final Invoice'),
+                ),
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: () =>
+                    ref.invalidate(proformaForRequestProvider(widget.job.id)),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Check Again'),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -87,7 +317,8 @@ class _CreateInvoiceViewState extends ConsumerState<_CreateInvoiceView> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Text(
             'Bill this job for labour and parts used. Once created, you can collect payment against it.',
-            style: TextStyle(fontSize: 12.5, color: secondaryTextColor(context)),
+            style:
+                TextStyle(fontSize: 12.5, color: secondaryTextColor(context)),
           ),
         ),
         Expanded(
@@ -96,9 +327,11 @@ class _CreateInvoiceViewState extends ConsumerState<_CreateInvoiceView> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.receipt_outlined, size: 48, color: secondaryTextColor(context)),
+                      Icon(Icons.receipt_outlined,
+                          size: 48, color: secondaryTextColor(context)),
                       const SizedBox(height: 12),
-                      Text('No line items added yet.', style: TextStyle(color: secondaryTextColor(context))),
+                      Text('No line items added yet.',
+                          style: TextStyle(color: secondaryTextColor(context))),
                     ],
                   ),
                 )
@@ -109,23 +342,33 @@ class _CreateInvoiceViewState extends ConsumerState<_CreateInvoiceView> {
                   itemBuilder: (context, i) {
                     final item = _items[i];
                     return GlassCard(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       child: Row(
                         children: [
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(item.description, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                                Text(item.description,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14)),
                                 const SizedBox(height: 2),
-                                Text('${item.qty} × ₹${item.unitPrice.toStringAsFixed(0)}',
-                                    style: TextStyle(fontSize: 12, color: secondaryTextColor(context))),
+                                Text(
+                                    '${item.qty} × ₹${item.unitPrice.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: secondaryTextColor(context))),
                               ],
                             ),
                           ),
-                          Text('₹${item.total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text('₹${item.total.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 14)),
                           IconButton(
-                            icon: const Icon(Icons.close, size: 18, color: AppColors.urgent),
+                            icon: const Icon(Icons.close,
+                                size: 18, color: AppColors.urgent),
                             onPressed: () => setState(() => _items.removeAt(i)),
                           ),
                         ],
@@ -137,13 +380,20 @@ class _CreateInvoiceViewState extends ConsumerState<_CreateInvoiceView> {
         if (_error != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(_error!, style: const TextStyle(color: AppColors.urgent)),
+            child:
+                Text(_error!, style: const TextStyle(color: AppColors.urgent)),
           ),
         Container(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+          padding: EdgeInsets.fromLTRB(
+              16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, -4))],
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, -4))
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -154,8 +404,11 @@ class _CreateInvoiceViewState extends ConsumerState<_CreateInvoiceView> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Total', style: TextStyle(color: secondaryTextColor(context))),
-                      Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('Total',
+                          style: TextStyle(color: secondaryTextColor(context))),
+                      Text('₹${total.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16)),
                     ],
                   ),
                 ),
@@ -173,7 +426,11 @@ class _CreateInvoiceViewState extends ConsumerState<_CreateInvoiceView> {
                     child: FilledButton(
                       onPressed: _submitting ? null : _create,
                       child: _submitting
-                          ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
                           : const Text('Create Invoice'),
                     ),
                   ),
@@ -217,7 +474,8 @@ class _PaymentViewState extends ConsumerState<_PaymentView> {
 
   Future<void> _recordPayment() async {
     if (_amount <= 0 || _amount > widget.invoice.outstanding) {
-      setState(() => _error = 'Amount must be between ₹0.01 and ₹${widget.invoice.outstanding.toStringAsFixed(0)}.');
+      setState(() => _error =
+          'Amount must be between ₹0.01 and ₹${widget.invoice.outstanding.toStringAsFixed(0)}.');
       return;
     }
     setState(() {
@@ -229,7 +487,9 @@ class _PaymentViewState extends ConsumerState<_PaymentView> {
             widget.invoice.id,
             amount: _amount,
             method: _method,
-            reference: _referenceController.text.trim().isEmpty ? null : _referenceController.text.trim(),
+            reference: _referenceController.text.trim().isEmpty
+                ? null
+                : _referenceController.text.trim(),
           );
       ref.invalidate(invoiceForRequestProvider(widget.job.id));
       ref.invalidate(jobDetailProvider(widget.job.id));
@@ -256,14 +516,22 @@ class _PaymentViewState extends ConsumerState<_PaymentView> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(invoice.number, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text(invoice.status.replaceAll('_', ' '), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: settled ? Colors.green : AppColors.gold400)),
+                  Text(invoice.number,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(invoice.status.replaceAll('_', ' '),
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: settled ? Colors.green : AppColors.gold400)),
                 ],
               ),
               const SizedBox(height: 12),
               _kv(context, 'Total', '₹${invoice.total.toStringAsFixed(0)}'),
               _kv(context, 'Paid', '₹${invoice.amountPaid.toStringAsFixed(0)}'),
-              _kv(context, 'Outstanding', '₹${invoice.outstanding.toStringAsFixed(0)}', bold: true),
+              _kv(context, 'Outstanding',
+                  '₹${invoice.outstanding.toStringAsFixed(0)}',
+                  bold: true),
             ],
           ),
         ),
@@ -275,12 +543,17 @@ class _PaymentViewState extends ConsumerState<_PaymentView> {
               children: const [
                 Icon(Icons.check_circle, color: Colors.green, size: 20),
                 SizedBox(width: 8),
-                Expanded(child: Text('Fully paid. Nothing more to collect on this job.')),
+                Expanded(
+                    child: Text(
+                        'Fully paid. Nothing more to collect on this job.')),
               ],
             ),
           )
         else ...[
-          Text('Record Payment', style: TextStyle(fontWeight: FontWeight.w700, color: secondaryTextColor(context))),
+          Text('Record Payment',
+              style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: secondaryTextColor(context))),
           const SizedBox(height: 10),
           GlassCard(
             padding: const EdgeInsets.all(16),
@@ -292,9 +565,12 @@ class _PaymentViewState extends ConsumerState<_PaymentView> {
                     Expanded(
                       child: TextFormField(
                         initialValue: _amount.toStringAsFixed(0),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(labelText: 'Amount (₹)'),
-                        onChanged: (v) => setState(() => _amount = double.tryParse(v) ?? 0),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration:
+                            const InputDecoration(labelText: 'Amount (₹)'),
+                        onChanged: (v) =>
+                            setState(() => _amount = double.tryParse(v) ?? 0),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -302,7 +578,10 @@ class _PaymentViewState extends ConsumerState<_PaymentView> {
                       child: DropdownButtonFormField<String>(
                         value: _method,
                         decoration: const InputDecoration(labelText: 'Method'),
-                        items: paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.replaceAll('_', ' ')))).toList(),
+                        items: paymentMethods
+                            .map((m) => DropdownMenuItem(
+                                value: m, child: Text(m.replaceAll('_', ' '))))
+                            .toList(),
                         onChanged: (v) => setState(() => _method = v ?? 'CASH'),
                       ),
                     ),
@@ -311,18 +590,26 @@ class _PaymentViewState extends ConsumerState<_PaymentView> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _referenceController,
-                  decoration: const InputDecoration(labelText: 'Reference (optional)', hintText: 'Transaction ID / cheque no.'),
+                  decoration: const InputDecoration(
+                      labelText: 'Reference (optional)',
+                      hintText: 'Transaction ID / cheque no.'),
                 ),
                 if (_error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 10),
-                    child: Text(_error!, style: const TextStyle(color: AppColors.urgent, fontSize: 12.5)),
+                    child: Text(_error!,
+                        style: const TextStyle(
+                            color: AppColors.urgent, fontSize: 12.5)),
                   ),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: _submitting ? null : _recordPayment,
                   child: _submitting
-                      ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
                       : Text('Record Payment (₹${_amount.toStringAsFixed(0)})'),
                 ),
               ],
@@ -333,14 +620,18 @@ class _PaymentViewState extends ConsumerState<_PaymentView> {
     );
   }
 
-  Widget _kv(BuildContext context, String label, String value, {bool bold = false}) {
+  Widget _kv(BuildContext context, String label, String value,
+      {bool bold = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: secondaryTextColor(context))),
-          Text(value, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.w600, fontSize: bold ? 16 : 14)),
+          Text(value,
+              style: TextStyle(
+                  fontWeight: bold ? FontWeight.bold : FontWeight.w600,
+                  fontSize: bold ? 16 : 14)),
         ],
       ),
     );
@@ -351,7 +642,8 @@ class _AddInvoiceLineItemSheet extends StatefulWidget {
   const _AddInvoiceLineItemSheet();
 
   @override
-  State<_AddInvoiceLineItemSheet> createState() => _AddInvoiceLineItemSheetState();
+  State<_AddInvoiceLineItemSheet> createState() =>
+      _AddInvoiceLineItemSheetState();
 }
 
 class _AddInvoiceLineItemSheetState extends State<_AddInvoiceLineItemSheet> {
@@ -372,17 +664,24 @@ class _AddInvoiceLineItemSheetState extends State<_AddInvoiceLineItemSheet> {
     final description = _descController.text.trim();
     final qty = int.tryParse(_qtyController.text.trim());
     final price = double.tryParse(_priceController.text.trim());
-    if (description.isEmpty || qty == null || qty <= 0 || price == null || price < 0) {
-      setState(() => _error = 'Enter a valid description, quantity, and price.');
+    if (description.isEmpty ||
+        qty == null ||
+        qty <= 0 ||
+        price == null ||
+        price < 0) {
+      setState(
+          () => _error = 'Enter a valid description, quantity, and price.');
       return;
     }
-    Navigator.of(context).pop(InvoiceLineItem(description: description, qty: qty, unitPrice: price));
+    Navigator.of(context).pop(
+        InvoiceLineItem(description: description, qty: qty, unitPrice: price));
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         decoration: BoxDecoration(
@@ -398,14 +697,18 @@ class _AddInvoiceLineItemSheetState extends State<_AddInvoiceLineItemSheet> {
                 width: 40,
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(color: secondaryTextColor(context).withValues(alpha: 0.4), borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(
+                    color: secondaryTextColor(context).withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            const Text('Add Line Item', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            const Text('Add Line Item',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             const SizedBox(height: 16),
             TextField(
               controller: _descController,
-              decoration: const InputDecoration(labelText: 'Description (e.g. Labour charge)'),
+              decoration: const InputDecoration(
+                  labelText: 'Description (e.g. Labour charge)'),
               textCapitalization: TextCapitalization.sentences,
             ),
             const SizedBox(height: 12),
@@ -422,8 +725,10 @@ class _AddInvoiceLineItemSheetState extends State<_AddInvoiceLineItemSheet> {
                 Expanded(
                   child: TextField(
                     controller: _priceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Unit price (₹)'),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration:
+                        const InputDecoration(labelText: 'Unit price (₹)'),
                   ),
                 ),
               ],
@@ -431,7 +736,9 @@ class _AddInvoiceLineItemSheetState extends State<_AddInvoiceLineItemSheet> {
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
-                child: Text(_error!, style: const TextStyle(color: AppColors.urgent, fontSize: 12.5)),
+                child: Text(_error!,
+                    style: const TextStyle(
+                        color: AppColors.urgent, fontSize: 12.5)),
               ),
             const SizedBox(height: 20),
             FilledButton(onPressed: _save, child: const Text('Add')),

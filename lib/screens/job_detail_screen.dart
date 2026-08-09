@@ -59,7 +59,6 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
           widget.jobId, position.latitude, position.longitude);
     } catch (_) {
       // Best-effort, same as job_repository.dart's own sendLocationPing —
-      // a failed/stale ping just gets skipped, not retried or surfaced.
     }
   }
 

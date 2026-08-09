@@ -20,6 +20,27 @@ class InvoiceLineItem {
       };
 }
 
+// The bill generated (server-side, verbatim) from an already-approved
+// Estimate — sits at SHARED until the customer accepts it in their own app,
+// then can be converted to a real Invoice. See InvoiceRepository.
+class ProformaInvoice {
+  final String id;
+  final String number;
+  final String status;
+  final double total;
+
+  ProformaInvoice({required this.id, required this.number, required this.status, required this.total});
+
+  factory ProformaInvoice.fromJson(Map<String, dynamic> json) {
+    return ProformaInvoice(
+      id: json['_id'] as String,
+      number: json['number'] as String,
+      status: json['status'] as String,
+      total: (json['total'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
 class Invoice {
   final String id;
   final String number;

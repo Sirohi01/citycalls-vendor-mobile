@@ -16,6 +16,26 @@ class InvoiceRepository {
     return items.isEmpty ? null : Invoice.fromJson(items.first as Map<String, dynamic>);
   }
 
+  Future<ProformaInvoice?> getProformaForRequest(String serviceRequestId) async {
+    final res = await _client.dio.get('/proforma-invoices', queryParameters: {'serviceRequestId': serviceRequestId, 'limit': 1});
+    final items = res.data['data'] as List;
+    return items.isEmpty ? null : ProformaInvoice.fromJson(items.first as Map<String, dynamic>);
+  }
+
+  // Carries the approved Estimate's exact items straight through to a
+  // customer-facing bill — no re-typing. Stops at SHARED; the customer still
+  // has to accept it (their own app) before convertProformaToInvoice below
+  // will succeed.
+  Future<ProformaInvoice> generateProformaInvoice(String serviceRequestId) async {
+    final res = await _client.dio.post('/service-requests/$serviceRequestId/generate-proforma-invoice');
+    return ProformaInvoice.fromJson(res.data['data'] as Map<String, dynamic>);
+  }
+
+  Future<Invoice> convertProformaToInvoice(String proformaId) async {
+    final res = await _client.dio.post('/proforma-invoices/$proformaId/convert');
+    return Invoice.fromJson(res.data['data'] as Map<String, dynamic>);
+  }
+
   Future<Invoice> createInvoice({
     required String customerId,
     required String branchId,

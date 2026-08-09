@@ -30,4 +30,10 @@ class EstimateRepository {
     final res = await _client.dio.post('/estimates/$id/share', data: {'channels': channels});
     return Estimate.fromJson(res.data['data'] as Map<String, dynamic>);
   }
+
+  Future<Estimate?> getApprovedEstimateForRequest(String serviceRequestId) async {
+    final res = await _client.dio.get('/estimates', queryParameters: {'serviceRequestId': serviceRequestId, 'status': 'APPROVED', 'limit': 1});
+    final items = res.data['data'] as List;
+    return items.isEmpty ? null : Estimate.fromJson(items.first as Map<String, dynamic>);
+  }
 }

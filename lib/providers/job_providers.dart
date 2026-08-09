@@ -4,6 +4,7 @@ import '../data/estimate_repository.dart';
 import '../data/invoice_repository.dart';
 import '../models/job_models.dart';
 import '../models/invoice_models.dart';
+import '../models/estimate_models.dart';
 import 'auth_providers.dart';
 import 'sync_providers.dart';
 
@@ -21,6 +22,14 @@ final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
 
 final invoiceForRequestProvider = FutureProvider.family<Invoice?, String>((ref, serviceRequestId) {
   return ref.watch(invoiceRepositoryProvider).getInvoiceForRequest(serviceRequestId);
+});
+
+final proformaForRequestProvider = FutureProvider.family<ProformaInvoice?, String>((ref, serviceRequestId) {
+  return ref.watch(invoiceRepositoryProvider).getProformaForRequest(serviceRequestId);
+});
+
+final approvedEstimateForRequestProvider = FutureProvider.family<Estimate?, String>((ref, serviceRequestId) {
+  return ref.watch(estimateRepositoryProvider).getApprovedEstimateForRequest(serviceRequestId);
 });
 
 // "Active route" — everything not yet in a completed/closed/cancelled state.

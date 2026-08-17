@@ -49,3 +49,7 @@ final completedJobsProvider = FutureProvider<List<JobSummary>>((ref) async {
 final jobDetailProvider = FutureProvider.family<JobDetail, String>((ref, id) {
   return ref.watch(jobRepositoryProvider).getJob(id);
 });
+
+final serviceDiagnosticsProvider = FutureProvider.family<ServiceDiagnostics, String>((ref, serviceId) {
+  return ref.watch(jobRepositoryProvider).getServiceDiagnostics(serviceId);
+});

@@ -39,6 +39,12 @@ class JobRepository {
     return JobDetail.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
+  Future<ServiceDiagnostics> getServiceDiagnostics(String serviceId) async {
+    final res = await _client.dio.get('/services/$serviceId/diagnostics');
+    return ServiceDiagnostics.fromJson(
+        res.data['data'] as Map<String, dynamic>);
+  }
+
   Future<void> _runQueued(
       String jobId, String actionType, Map<String, dynamic> payload) async {
     final action = await _syncRepo.enqueue(

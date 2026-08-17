@@ -138,9 +138,49 @@ class CustomerProductInfo {
   }
 }
 
+class MasterOption {
+  final String id;
+  final String label;
+  final String? repairCategory;
+
+  MasterOption({required this.id, required this.label, this.repairCategory});
+
+  factory MasterOption.fromJson(Map<String, dynamic> json) {
+    final meta = json['meta'] as Map<String, dynamic>?;
+    return MasterOption(
+      id: json['_id'] as String,
+      label: json['label'] as String,
+      repairCategory: meta?['repairCategory'] as String?,
+    );
+  }
+}
+
+class ServiceDiagnostics {
+  final List<MasterOption> symptoms;
+  final List<MasterOption> defects;
+  final List<MasterOption> solutionTypes;
+
+  ServiceDiagnostics(
+      {required this.symptoms,
+      required this.defects,
+      required this.solutionTypes});
+
+  factory ServiceDiagnostics.fromJson(Map<String, dynamic> json) {
+    List<MasterOption> parse(String key) => ((json[key] as List?) ?? [])
+        .map((m) => MasterOption.fromJson(m as Map<String, dynamic>))
+        .toList();
+    return ServiceDiagnostics(
+      symptoms: parse('symptoms'),
+      defects: parse('defects'),
+      solutionTypes: parse('solutionTypes'),
+    );
+  }
+}
+
 class JobDetail {
   final String id;
   final String number;
+  final String? serviceId;
   final String status;
   final String priority;
   final String? serviceName;
@@ -160,6 +200,7 @@ class JobDetail {
   JobDetail({
     required this.id,
     required this.number,
+    this.serviceId,
     required this.status,
     required this.priority,
     this.serviceName,
@@ -194,6 +235,7 @@ class JobDetail {
     return JobDetail(
       id: json['_id'] as String,
       number: json['number'] as String,
+      serviceId: service?['_id'] as String?,
       status: json['status'] as String,
       priority: json['priority'] as String? ?? 'NORMAL',
       serviceName: service?['name'] as String?,

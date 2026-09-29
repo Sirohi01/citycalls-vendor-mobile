@@ -6,7 +6,8 @@ import '../models/auth_models.dart';
 // Compile-time override for staging/prod: flutter run/build
 // --dart-define=API_BASE_URL=https://api.citycalls.example/api/v1
 const _apiBaseUrl = String.fromEnvironment('API_BASE_URL',
-    defaultValue: 'https://nenita-untoured-nonhesitantly.ngrok-free.dev/api/v1');
+    // defaultValue: 'https://nenita-untoured-nonhesitantly.ngrok-free.dev/api/v1');
+    defaultValue: 'https://api.citycalls.in/api/v1');
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(baseUrl: _apiBaseUrl);
@@ -21,7 +22,13 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 // assigneeType EMPLOYEE vs VENDOR server-side) — VENDOR_OWNER/VENDOR_MANAGER
 // are a distinct, non-field-work role (company roster/dashboard/payouts,
 // see role_router.dart) but log into the same app.
-const _supportedRoles = {'EMPLOYEE', 'TECHNICIAN', 'VENDOR_OWNER', 'VENDOR_MANAGER', 'VENDOR_TECHNICIAN'};
+const _supportedRoles = {
+  'EMPLOYEE',
+  'TECHNICIAN',
+  'VENDOR_OWNER',
+  'VENDOR_MANAGER',
+  'VENDOR_TECHNICIAN'
+};
 
 enum AuthStep { enterMobile, otpSent, loggedIn }
 
@@ -44,7 +51,13 @@ class AuthState {
     this.sessionChecked = false,
   });
 
-  AuthState copyWith({AuthStep? step, bool? isLoading, String? errorMessage, String? mobile, AuthUser? user, bool? sessionChecked}) {
+  AuthState copyWith(
+      {AuthStep? step,
+      bool? isLoading,
+      String? errorMessage,
+      String? mobile,
+      AuthUser? user,
+      bool? sessionChecked}) {
     return AuthState(
       step: step ?? this.step,
       isLoading: isLoading ?? this.isLoading,
@@ -69,7 +82,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } on AuthException catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.message);
     } catch (_) {
-      state = state.copyWith(isLoading: false, errorMessage: 'Failed to connect to the server.');
+      state = state.copyWith(
+          isLoading: false, errorMessage: 'Failed to connect to the server.');
     }
   }
 
@@ -83,15 +97,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
         await _client.clearAccessToken();
         state = state.copyWith(
           isLoading: false,
-          errorMessage: 'This number isn\'t registered as a technician. Contact your admin.',
+          errorMessage:
+              'This number isn\'t registered as a technician. Contact your admin.',
         );
         return;
       }
-      state = state.copyWith(isLoading: false, step: AuthStep.loggedIn, user: result.user, sessionChecked: true);
+      state = state.copyWith(
+          isLoading: false,
+          step: AuthStep.loggedIn,
+          user: result.user,
+          sessionChecked: true);
     } on AuthException catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.message);
     } catch (_) {
-      state = state.copyWith(isLoading: false, errorMessage: 'Failed to connect to the server.');
+      state = state.copyWith(
+          isLoading: false, errorMessage: 'Failed to connect to the server.');
     }
   }
 
@@ -115,7 +135,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(sessionChecked: true);
         return;
       }
-      state = state.copyWith(user: user, step: AuthStep.loggedIn, sessionChecked: true);
+      state = state.copyWith(
+          user: user, step: AuthStep.loggedIn, sessionChecked: true);
     } catch (_) {
       // Covers both "session invalid/expired" (clear it) and "secure storage
       // itself unavailable" (e.g. no platform channel in a widget test) —
@@ -133,5 +154,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.watch(authRepositoryProvider), ref.watch(apiClientProvider));
+  return AuthNotifier(
+      ref.watch(authRepositoryProvider), ref.watch(apiClientProvider));
 });

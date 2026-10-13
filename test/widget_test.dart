@@ -10,16 +10,20 @@ void main() {
   // real session-restore call and its spinner animates indefinitely, which
   // leaves pumpAndSettle waiting on scheduled frames forever in a widget
   // test (same pattern as citycalls-customer-mobile's widget_test.dart).
-  testWidgets('Shows the mobile-number entry screen', (WidgetTester tester) async {
-    await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: OtpRequestScreen())));
+  testWidgets('Shows the mobile-number entry screen',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: OtpRequestScreen())));
 
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Welcome, Partner!'), findsOneWidget);
     expect(find.widgetWithText(TextFormField, 'Mobile number'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Send OTP'), findsOneWidget);
   });
 
-  testWidgets('Shows a validation error for an invalid mobile number', (WidgetTester tester) async {
-    await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: OtpRequestScreen())));
+  testWidgets('Shows a validation error for an invalid mobile number',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: OtpRequestScreen())));
 
     await tester.tap(find.widgetWithText(FilledButton, 'Send OTP'));
     await tester.pump();

@@ -1,4 +1,8 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
+import '../app_navigator.dart';
+import '../screens/notification_center_screen.dart';
 import 'employee_repository.dart';
 
 // Registers this device's FCM token with the backend so PUSH-channel
@@ -12,27 +16,71 @@ class PushNotificationService {
   final EmployeeRepository _employeeRepo;
   PushNotificationService(this._employeeRepo);
 
-  Future<void> initialize() async {
-    final messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission(alert: true, badge: true, sound: true);
+  bool _tapHandlersAttached = false;
 
-    final token = await messaging.getToken();
-    if (token != null) await _registerSafely(token);
+  // Firebase only initializes when google-services.json (Android) /
+  // GoogleService-Info.plist (iOS) is bundled — see main.dart. Without it
+  // every FirebaseMessaging call throws, so the whole service is a no-op.
+  bool get isAvailable => Firebase.apps.isNotEmpty;
 
-    // Tokens rotate (app reinstall, data clear, FCM-side refresh) — without
-    // this, a device would silently stop receiving pushes after a rotation
-    // until the next full app restart happened to re-register.
-    messaging.onTokenRefresh.listen(_registerSafely);
+  // [canRegisterToken]: the backend only stores FCM tokens on Employee
+  // records (POST /employees/me/fcm-token). VENDOR_TECHNICIAN and vendor
+  // owners have no Employee record, so for them registration would just
+  // 404 — they still get in-app notifications via the Notification Center.
+  Future<void> initialize({required bool canRegisterToken}) async {
+    if (!isAvailable) return;
+    try {
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
+
+      if (canRegisterToken) {
+        final token = await messaging.getToken();
+        if (token != null) await _registerSafely(token);
+        // Tokens rotate (reinstall, data clear, FCM-side refresh).
+        messaging.onTokenRefresh.listen(_registerSafely);
+      }
+      _attachTapHandlers(messaging);
+    } catch (_) {
+      // Push is best-effort — the app works fine without it.
+    }
   }
 
   Future<void> _registerSafely(String token) async {
     try {
       await _employeeRepo.registerFcmToken(token);
     } catch (_) {
-      // Best-effort — a failed registration just means this device won't
-      // get pushes until the next successful attempt (app resume, token
-      // refresh), not worth surfacing to the user over.
+      // Best-effort — retried on the next token refresh / app start.
     }
+  }
+
+  // citycalls-api sends only `{triggerKey}` as push data (no entity id), so
+  // a tap routes to the right SCREEN rather than the exact job: job-related
+  // pushes open the My Jobs tab, everything else the Notification Center.
+  void _attachTapHandlers(FirebaseMessaging messaging) {
+    if (_tapHandlersAttached) return;
+    _tapHandlersAttached = true;
+    FirebaseMessaging.onMessageOpenedApp.listen(_openFor);
+    // A push that launched the app from terminated state is only readable
+    // once, here.
+    messaging.getInitialMessage().then((message) {
+      if (message != null) _openFor(message);
+    });
+  }
+
+  void _openFor(RemoteMessage message) {
+    final navigator = appNavigator;
+    if (navigator == null) return;
+    final triggerKey =
+        (message.data['triggerKey'] ?? '').toString().toUpperCase();
+    if (triggerKey.contains('SERVICE_REQUEST') ||
+        triggerKey.contains('JOB') ||
+        triggerKey.contains('ASSIGN')) {
+      pendingShellTab.value = ShellTab.myJobs;
+      navigator.popUntil((route) => route.isFirst);
+      return;
+    }
+    navigator.push(
+        MaterialPageRoute(builder: (_) => const NotificationCenterScreen()));
   }
 
   // Called on logout — without this, a device keeps receiving the outgoing
@@ -40,12 +88,12 @@ class PushNotificationService {
   // same device, would receive the previous technician's job alerts too,
   // since registerFcmToken uses $addToSet without ever clearing old owners).
   Future<void> unregisterCurrentToken() async {
+    if (!isAvailable) return;
     try {
       final token = await FirebaseMessaging.instance.getToken();
       if (token != null) await _employeeRepo.unregisterFcmToken(token);
     } catch (_) {
-      // Best-effort on logout too — worst case the token lingers on the old
-      // account until it naturally goes stale/gets replaced.
+      // Best-effort on logout too.
     }
   }
 }

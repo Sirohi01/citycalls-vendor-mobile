@@ -1,12 +1,13 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/api_client.dart';
 import '../data/auth_repository.dart';
 import '../models/auth_models.dart';
 
-// Compile-time override for staging/prod: flutter run/build
-// --dart-define=API_BASE_URL=https://api.citycalls.example/api/v1
+// The ONLY place the API base URL is set (ApiClient has no default). Live by
+// default; override for local/staging builds with
+//   flutter run --dart-define=API_BASE_URL=http://<mac-ip>:4000/api/v1
 const _apiBaseUrl = String.fromEnvironment('API_BASE_URL',
-    // defaultValue: 'https://nenita-untoured-nonhesitantly.ngrok-free.dev/api/v1');
     defaultValue: 'https://api.citycalls.in/api/v1');
 
 final apiClientProvider = Provider<ApiClient>((ref) {
@@ -98,10 +99,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(
           isLoading: false,
           errorMessage:
-              'This number isn\'t registered as a technician. Contact your admin.',
+              'This number isn\'t registered as a technician or vendor. Contact your admin.',
         );
         return;
       }
+      await _repository.cacheUser(result.user);
+      await _repository.saveRememberedMobile(mobile);
       state = state.copyWith(
           isLoading: false,
           step: AuthStep.loggedIn,
@@ -122,29 +125,47 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // Called once from the splash screen — a stored token doesn't prove it's
   // still valid (could be expired/revoked server-side), so this round-trips
   // through GET /auth/me rather than trusting the token's mere presence.
+  //
+  // A network failure is NOT a logout: a field technician often opens the
+  // app with no signal, and their offline queue needs the session. In that
+  // case the last signed-in user (cached at login) is restored; only a real
+  // server rejection (handled by ApiClient's refresh) ends the session.
   Future<void> restoreSession() async {
     try {
-      final token = await _client.readAccessToken();
-      if (token == null) {
+      final refreshToken = await _client.readRefreshToken();
+      if (refreshToken == null) {
         state = state.copyWith(sessionChecked: true);
         return;
       }
-      final user = await _repository.getMe();
+      final user =
+          await _repository.getMe().timeout(const Duration(seconds: 10));
       if (!_supportedRoles.contains(user.role)) {
-        await _client.clearAccessToken();
+        await _repository.logout();
         state = state.copyWith(sessionChecked: true);
         return;
       }
+      await _repository.cacheUser(user);
       state = state.copyWith(
           user: user, step: AuthStep.loggedIn, sessionChecked: true);
-    } catch (_) {
-      // Covers both "session invalid/expired" (clear it) and "secure storage
-      // itself unavailable" (e.g. no platform channel in a widget test) —
-      // either way, fail safe to the login screen rather than leaving the
-      // splash screen spinning forever.
-      await _client.clearAccessToken().catchError((_) {});
+    } catch (e) {
+      final serverRejected = e is DioException && e.response != null;
+      final cached = serverRejected ? null : await _repository.readCachedUser();
+      if (cached != null && await _client.readRefreshToken() != null) {
+        state = state.copyWith(
+            user: cached, step: AuthStep.loggedIn, sessionChecked: true);
+        return;
+      }
+      if (serverRejected) {
+        await _repository.logout().catchError((_) {});
+      }
       state = state.copyWith(sessionChecked: true);
     }
+  }
+
+  // ApiClient already cleared the tokens; drop the in-memory user too.
+  void sessionEnded() {
+    _repository.clearCachedUser();
+    state = const AuthState(sessionChecked: true);
   }
 
   Future<void> logout() async {

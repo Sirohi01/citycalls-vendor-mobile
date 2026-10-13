@@ -9,12 +9,16 @@ class AuthUser {
   final String role;
   final String? vendorId;
 
-  AuthUser({required this.id, required this.name, required this.role, this.vendorId});
+  AuthUser(
+      {required this.id,
+      required this.name,
+      required this.role,
+      this.vendorId});
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     return AuthUser(
       id: json['id'] as String,
-      name: json['name'] as String,
+      name: json['name'] as String? ?? '',
       role: json['role'] as String,
       vendorId: json['vendorId'] as String?,
     );
@@ -26,11 +30,18 @@ class AuthUser {
   factory AuthUser.fromMeJson(Map<String, dynamic> json) {
     return AuthUser(
       id: json['_id'] as String,
-      name: json['name'] as String,
+      name: json['name'] as String? ?? '',
       role: json['role'] as String,
       vendorId: json['vendorId'] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'role': role,
+        if (vendorId != null) 'vendorId': vendorId,
+      };
 
   // Per docs/manish/09-vendor-app-functional-plan.md §6: this app serves both
   // Employee and Vendor Technician roles from one binary. VENDOR_TECHNICIAN
@@ -38,7 +49,8 @@ class AuthUser {
   // VENDOR_OWNER/VENDOR_MANAGER are company management roles instead — they
   // don't do field work, so they get a distinct shell (see role_router.dart).
   bool get isVendorRole => role.startsWith('VENDOR_');
-  bool get isVendorManagement => role == 'VENDOR_OWNER' || role == 'VENDOR_MANAGER';
+  bool get isVendorManagement =>
+      role == 'VENDOR_OWNER' || role == 'VENDOR_MANAGER';
 }
 
 class LoginResponse {
@@ -46,7 +58,10 @@ class LoginResponse {
   final String refreshToken;
   final AuthUser user;
 
-  LoginResponse({required this.accessToken, required this.refreshToken, required this.user});
+  LoginResponse(
+      {required this.accessToken,
+      required this.refreshToken,
+      required this.user});
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
     return LoginResponse(
@@ -62,7 +77,8 @@ class ApiFieldError {
   final String code;
   final String message;
 
-  ApiFieldError({required this.field, required this.code, required this.message});
+  ApiFieldError(
+      {required this.field, required this.code, required this.message});
 
   factory ApiFieldError.fromJson(Map<String, dynamic> json) {
     return ApiFieldError(

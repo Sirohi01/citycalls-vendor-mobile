@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/estimate_models.dart';
 import '../models/job_models.dart';
 import '../providers/job_providers.dart';
-import '../theme/app_theme.dart';
+import '../widgets/form_kit.dart';
+import '../widgets/state_views.dart';
+import '../widgets/ui_kit.dart';
 
 // Per docs/manish/09-vendor-app-functional-plan.md's Estimate flow — after
 // inspection, a technician can draft an estimate for extra parts/labour and
@@ -22,20 +24,31 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
   final List<EstimateLineItem> _items = [];
   bool _submitting = false;
   String? _error;
+  // Set once the estimate exists server-side. If sharing then fails, a
+  // retry only re-shares it — it must not create a second estimate.
+  String? _createdEstimateId;
 
   Future<void> _addItem() async {
-    final item = await showModalBottomSheet<EstimateLineItem>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const _AddLineItemSheet(),
-    );
-    if (item != null) setState(() => _items.add(item));
+    final input = await showLineItemSheet(context,
+        title: 'Add line item',
+        nameLabel: 'Description',
+        nameHint: 'e.g. Compressor replacement');
+    if (input == null) return;
+    setState(() {
+      _error = null;
+      _items.add(EstimateLineItem(
+          description: input.name, qty: input.qty, unitPrice: input.unitPrice));
+    });
   }
 
   Future<void> _createAndShare() async {
     if (_items.isEmpty) {
       setState(() => _error = 'Add at least one line item before sharing.');
+      return;
+    }
+    if (widget.job.branchId.isEmpty || widget.job.customerId.isEmpty) {
+      setState(() => _error =
+          'This job has no branch assigned yet, so an estimate cannot be created from the app. Please ask the office to add it.');
       return;
     }
     setState(() {
@@ -44,18 +57,22 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
     });
     try {
       final repo = ref.read(estimateRepositoryProvider);
-      final estimate = await repo.createEstimate(
+      _createdEstimateId ??= (await repo.createEstimate(
         customerId: widget.job.customerId,
         branchId: widget.job.branchId,
         serviceRequestId: widget.job.id,
         items: _items,
-      );
-      await repo.shareEstimate(estimate.id);
+      ))
+          .id;
+      await repo.shareEstimate(_createdEstimateId!);
       ref.invalidate(jobDetailProvider(widget.job.id));
-      ref.invalidate(myJobsProvider);
-      if (mounted) Navigator.of(context).pop();
+      ref.invalidate(allJobsProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Estimate sent to the customer for approval.')));
+      Navigator.of(context).pop();
     } catch (e) {
-      setState(() => _error = 'Failed to create/share estimate: $e');
+      if (mounted) setState(() => _error = describeError(e));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -64,207 +81,80 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
   @override
   Widget build(BuildContext context) {
     final total = _items.fold<double>(0, (sum, i) => sum + i.total);
+    // Once created, the items are fixed server-side — only sharing remains.
+    final locked = _createdEstimateId != null;
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Create Estimate')),
-      body: Column(
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Text(
-              'Add parts/labour needed beyond the base visit. The customer will be asked to approve this before you continue.',
-              style: TextStyle(fontSize: 12.5, color: secondaryTextColor(context)),
-            ),
-          ),
-          Expanded(
-            child: _items.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.receipt_long_outlined, size: 48, color: secondaryTextColor(context)),
-                        const SizedBox(height: 12),
-                        Text('No line items added yet.', style: TextStyle(color: secondaryTextColor(context))),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _items.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, i) {
-                      final item = _items[i];
-                      return GlassCard(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(item.description, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                                  const SizedBox(height: 2),
-                                  Text('${item.qty} × ₹${item.unitPrice.toStringAsFixed(0)}',
-                                      style: TextStyle(fontSize: 12, color: secondaryTextColor(context))),
-                                ],
-                              ),
-                            ),
-                            Text('₹${item.total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 18, color: AppColors.urgent),
-                              onPressed: () => setState(() => _items.removeAt(i)),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          if (_error != null)
+          const InfoNote(
+              'Add the parts and labour needed. The customer will be asked to approve this before you start work.'),
+          const SizedBox(height: 20),
+          if (_items.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(_error!, style: const TextStyle(color: AppColors.urgent)),
-            ),
-          Container(
-            padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, -4))],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_items.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Total', style: TextStyle(color: secondaryTextColor(context))),
-                        Text('₹${total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      ],
-                    ),
-                  ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _addItem,
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Add Item'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: _submitting ? null : _createAndShare,
-                        child: _submitting
-                            ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Text('Share with Customer'),
-                      ),
-                    ),
-                  ],
+              padding: const EdgeInsets.only(top: 40),
+              child: UiEmptyState(
+                icon: Icons.receipt_long_outlined,
+                title: 'No items yet',
+                message: 'Add each part or labour charge as a line item.',
+                actionLabel: 'Add Item',
+                onAction: _addItem,
+              ),
+            )
+          else ...[
+            UiSectionLabel('${_items.length} item(s)'),
+            for (var i = 0; i < _items.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: LineItemTile(
+                  name: _items[i].description,
+                  qty: _items[i].qty,
+                  unitPrice: _items[i].unitPrice,
+                  onRemove:
+                      locked ? null : () => setState(() => _items.removeAt(i)),
                 ),
-              ],
-            ),
-          ),
+              ),
+          ],
         ],
       ),
-    );
-  }
-}
-
-class _AddLineItemSheet extends StatefulWidget {
-  const _AddLineItemSheet();
-
-  @override
-  State<_AddLineItemSheet> createState() => _AddLineItemSheetState();
-}
-
-class _AddLineItemSheetState extends State<_AddLineItemSheet> {
-  final _descController = TextEditingController();
-  final _qtyController = TextEditingController(text: '1');
-  final _priceController = TextEditingController();
-  String? _error;
-
-  @override
-  void dispose() {
-    _descController.dispose();
-    _qtyController.dispose();
-    _priceController.dispose();
-    super.dispose();
-  }
-
-  void _save() {
-    final description = _descController.text.trim();
-    final qty = int.tryParse(_qtyController.text.trim());
-    final price = double.tryParse(_priceController.text.trim());
-    if (description.isEmpty || qty == null || qty <= 0 || price == null || price < 0) {
-      setState(() => _error = 'Enter a valid description, quantity, and price.');
-      return;
-    }
-    Navigator.of(context).pop(EstimateLineItem(description: description, qty: qty, unitPrice: price));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(color: secondaryTextColor(context).withValues(alpha: 0.4), borderRadius: BorderRadius.circular(2)),
+      bottomNavigationBar: _items.isEmpty && _error == null
+          ? null
+          : BottomActionBar(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  InlineError(_error),
+                  if (_items.isNotEmpty) TotalRow(amount: total),
+                  Row(
+                    children: [
+                      if (!locked) ...[
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _submitting ? null : _addItem,
+                            icon: const Icon(Icons.add_rounded, size: 18),
+                            label: const Text('Add Item'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _submitting || _items.isEmpty
+                              ? null
+                              : _createAndShare,
+                          child: _submitting
+                              ? const ButtonSpinner()
+                              : Text(
+                                  locked ? 'Send Again' : 'Send to Customer'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const Text('Add Line Item', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _descController,
-              decoration: const InputDecoration(labelText: 'Description (e.g. Compressor replacement)'),
-              textCapitalization: TextCapitalization.sentences,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _qtyController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Quantity'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _priceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Unit price (₹)'),
-                  ),
-                ),
-              ],
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Text(_error!, style: const TextStyle(color: AppColors.urgent, fontSize: 12.5)),
-              ),
-            const SizedBox(height: 20),
-            FilledButton(onPressed: _save, child: const Text('Add')),
-          ],
-        ),
-      ),
     );
   }
 }

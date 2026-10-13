@@ -9,7 +9,8 @@ import 'auth_providers.dart';
 import 'sync_providers.dart';
 
 final jobRepositoryProvider = Provider<JobRepository>((ref) {
-  return JobRepository(ref.watch(apiClientProvider), ref.watch(syncRepositoryProvider), ref.watch(syncEngineProvider));
+  return JobRepository(ref.watch(apiClientProvider),
+      ref.watch(syncRepositoryProvider), ref.watch(syncEngineProvider));
 });
 
 final estimateRepositoryProvider = Provider<EstimateRepository>((ref) {
@@ -20,29 +21,41 @@ final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
   return InvoiceRepository(ref.watch(apiClientProvider));
 });
 
-final invoiceForRequestProvider = FutureProvider.family<Invoice?, String>((ref, serviceRequestId) {
-  return ref.watch(invoiceRepositoryProvider).getInvoiceForRequest(serviceRequestId);
+final invoiceForRequestProvider =
+    FutureProvider.family<Invoice?, String>((ref, serviceRequestId) {
+  return ref
+      .watch(invoiceRepositoryProvider)
+      .getInvoiceForRequest(serviceRequestId);
 });
 
-final proformaForRequestProvider = FutureProvider.family<ProformaInvoice?, String>((ref, serviceRequestId) {
-  return ref.watch(invoiceRepositoryProvider).getProformaForRequest(serviceRequestId);
+final proformaForRequestProvider =
+    FutureProvider.family<ProformaInvoice?, String>((ref, serviceRequestId) {
+  return ref
+      .watch(invoiceRepositoryProvider)
+      .getProformaForRequest(serviceRequestId);
 });
 
-final approvedEstimateForRequestProvider = FutureProvider.family<Estimate?, String>((ref, serviceRequestId) {
-  return ref.watch(estimateRepositoryProvider).getApprovedEstimateForRequest(serviceRequestId);
+final approvedEstimateForRequestProvider =
+    FutureProvider.family<Estimate?, String>((ref, serviceRequestId) {
+  return ref
+      .watch(estimateRepositoryProvider)
+      .getApprovedEstimateForRequest(serviceRequestId);
 });
 
-// "Active route" — everything not yet in a completed/closed/cancelled state.
-// A plain client-side filter (not a status_in param) so the same fetched
-// list backs both My Jobs and (once built) a jobs-history view without a
-// second round-trip.
+// One fetch of the technician's jobs backs both My Jobs (active) and
+// History (done) — refreshing either refreshes both, with one round-trip.
+final allJobsProvider = FutureProvider<List<JobSummary>>((ref) {
+  return ref.watch(jobRepositoryProvider).listJobs();
+});
+
+// "Active route" — everything the technician still has work to do on.
 final myJobsProvider = FutureProvider<List<JobSummary>>((ref) async {
-  final all = await ref.watch(jobRepositoryProvider).listJobs();
+  final all = await ref.watch(allJobsProvider.future);
   return all.where((j) => !isCompletedJobStatus(j.status)).toList();
 });
 
 final completedJobsProvider = FutureProvider<List<JobSummary>>((ref) async {
-  final all = await ref.watch(jobRepositoryProvider).listJobs();
+  final all = await ref.watch(allJobsProvider.future);
   return all.where((j) => isCompletedJobStatus(j.status)).toList();
 });
 
@@ -50,6 +63,12 @@ final jobDetailProvider = FutureProvider.family<JobDetail, String>((ref, id) {
   return ref.watch(jobRepositoryProvider).getJob(id);
 });
 
-final serviceDiagnosticsProvider = FutureProvider.family<ServiceDiagnostics, String>((ref, serviceId) {
+final serviceDiagnosticsProvider =
+    FutureProvider.family<ServiceDiagnostics, String>((ref, serviceId) {
   return ref.watch(jobRepositoryProvider).getServiceDiagnostics(serviceId);
+});
+
+final paymentsForInvoiceProvider =
+    FutureProvider.family<List<PaymentReceipt>, String>((ref, invoiceId) {
+  return ref.watch(invoiceRepositoryProvider).listPayments(invoiceId);
 });

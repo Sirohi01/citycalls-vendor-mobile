@@ -48,3 +48,6 @@ app.*.map.json
 # canonical spec lives in citycalls-docs, this is a derived/regenerable
 # artifact, never committed here.
 /openapi/
+
+# Screen renders from test/screenshots_test.dart
+test/shots/

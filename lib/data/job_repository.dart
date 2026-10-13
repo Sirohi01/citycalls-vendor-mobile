@@ -190,7 +190,9 @@ class JobRepository {
         'entityId': jobId,
         'publicId': cloudinaryRes.data['public_id'],
         'url': cloudinaryRes.data['secure_url'],
-        'mimeType': 'image/jpeg',
+        'mimeType': file.path.toLowerCase().endsWith('.png')
+            ? 'image/png'
+            : 'image/jpeg',
         'sizeBytes': await file.length(),
       });
       return confirmRes.data['data']['url'] as String;

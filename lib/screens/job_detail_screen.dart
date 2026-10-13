@@ -1,10 +1,11 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/job_models.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/state_views.dart';
+import '../widgets/ui_kit.dart';
 import 'inspection_form_screen.dart';
 import 'work_progress_screen.dart';
 import 'parts_entry_screen.dart';
@@ -12,6 +13,9 @@ import 'estimate_form_screen.dart';
 import 'invoice_screen.dart';
 import 'completion_screen.dart';
 
+// Live-location pings while TECHNICIAN_EN_ROUTE are sent app-wide by
+// providers/transit_tracking_provider.dart (started from MainShell), not
+// from this screen, so they keep going after the technician leaves it.
 class JobDetailScreen extends ConsumerStatefulWidget {
   final String jobId;
   const JobDetailScreen({super.key, required this.jobId});
@@ -23,113 +27,50 @@ class JobDetailScreen extends ConsumerStatefulWidget {
 class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
   bool _submitting = false;
   String? _error;
-  Timer? _locationPingTimer;
-  bool _locationPingActive = false;
 
-  void _syncLocationPing(String status) {
-    final shouldPing = status == 'TECHNICIAN_EN_ROUTE';
-    if (shouldPing == _locationPingActive) return;
-    _locationPingActive = shouldPing;
-    if (shouldPing) {
-      _sendLocationPingOnce();
-      _locationPingTimer = Timer.periodic(
-          const Duration(seconds: 20), (_) => _sendLocationPingOnce());
-    } else {
-      _locationPingTimer?.cancel();
-      _locationPingTimer = null;
-    }
+  void _refresh() {
+    ref.invalidate(jobDetailProvider(widget.jobId));
+    ref.invalidate(allJobsProvider);
   }
 
-  Future<void> _sendLocationPingOnce() async {
-    try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        return;
-      }
-      final position = await Geolocator.getCurrentPosition(
-          locationSettings:
-              const LocationSettings(accuracy: LocationAccuracy.high));
-      await ref.read(jobRepositoryProvider).sendLocationPing(
-          widget.jobId, position.latitude, position.longitude);
-    } catch (_) {
-      // Best-effort, same as job_repository.dart's own sendLocationPing —
-    }
-  }
-
-  @override
-  void dispose() {
-    _locationPingTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _changeStatus(String toStatus, {String? reason}) async {
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
-    try {
-      await ref
-          .read(jobRepositoryProvider)
-          .changeStatus(widget.jobId, toStatus, reason: reason);
-      ref.invalidate(jobDetailProvider(widget.jobId));
-      ref.invalidate(myJobsProvider);
-      ref.invalidate(completedJobsProvider);
-    } catch (e) {
-      setState(() => _error = 'Failed: $e');
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  Future<void> _startTravel(JobDetail job) async {
+  // Runs one or more status changes as a single user action. Each step is
+  // queued offline-first (job_repository.dart) — offline, it simply waits
+  // in the queue; a server rejection comes back as a readable message.
+  Future<void> _run(List<String> statuses, {String? reason}) async {
     setState(() {
       _submitting = true;
       _error = null;
     });
     try {
       final repository = ref.read(jobRepositoryProvider);
-      // ACCEPTED cannot transition directly to EN_ROUTE on the API. Preserve
-      // the required workflow hop while keeping this a single user action.
-      if (job.status == 'ACCEPTED') {
-        await repository.changeStatus(widget.jobId, 'APPOINTMENT_SCHEDULED');
+      for (final s in statuses) {
+        await repository.changeStatus(widget.jobId, s,
+            reason: s == statuses.last ? reason : null);
       }
-      await repository.changeStatus(widget.jobId, 'TECHNICIAN_EN_ROUTE');
-      ref.invalidate(jobDetailProvider(widget.jobId));
-      ref.invalidate(myJobsProvider);
+      _refresh();
     } catch (e) {
-      if (mounted) setState(() => _error = 'Failed: $e');
+      if (mounted) setState(() => _error = describeError(e));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  Future<void> _markPartsPending(JobDetail job) async {
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
-    try {
-      final repository = ref.read(jobRepositoryProvider);
-      // PARTS_PENDING is only reachable from WORK_IN_PROGRESS on the API —
-      // hop through it first if the technician hasn't logged work yet.
-      if (job.status == 'WORK_STARTED') {
-        await repository.changeStatus(widget.jobId, 'WORK_IN_PROGRESS');
-      }
-      await repository.changeStatus(widget.jobId, 'PARTS_PENDING');
-      ref.invalidate(jobDetailProvider(widget.jobId));
-      ref.invalidate(myJobsProvider);
-    } catch (e) {
-      if (mounted) setState(() => _error = 'Failed: $e');
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
+  Future<void> _changeStatus(String toStatus, {String? reason}) =>
+      _run([toStatus], reason: reason);
+
+  // ACCEPTED cannot transition directly to EN_ROUTE on the API. Preserve
+  // the required workflow hop while keeping this a single user action.
+  Future<void> _startTravel(JobDetail job) => _run([
+        if (job.status == 'ACCEPTED') 'APPOINTMENT_SCHEDULED',
+        'TECHNICIAN_EN_ROUTE',
+      ]);
+
+  // PARTS_PENDING is only reachable from WORK_IN_PROGRESS on the API — hop
+  // through it first if the technician hasn't logged work yet.
+  Future<void> _markPartsPending(JobDetail job) => _run([
+        if (job.status == 'WORK_STARTED') 'WORK_IN_PROGRESS',
+        'PARTS_PENDING',
+      ]);
 
   Future<void> _confirmAndChangeStatus(String toStatus,
       {required String title,
@@ -145,6 +86,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           FilledButton(
+              style: FilledButton.styleFrom(minimumSize: const Size(110, 44)),
               onPressed: () => Navigator.pop(ctx, true),
               child: Text(confirmLabel)),
         ],
@@ -168,7 +110,9 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
           TextButton(
               onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.urgent),
+            style: FilledButton.styleFrom(
+                backgroundColor: AppColors.urgent,
+                minimumSize: const Size(110, 44)),
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
             child: const Text('Reject'),
           ),
@@ -178,6 +122,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     if (reason != null) {
       await _changeStatus('REASSIGNMENT_REQUIRED',
           reason: reason.isEmpty ? 'Rejected by technician' : reason);
+      if (mounted && _error == null) Navigator.of(context).pop();
     }
   }
 
@@ -186,57 +131,128 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     final job = ref.watch(jobDetailProvider(widget.jobId));
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Job Details')),
       body: job.when(
-        data: (j) {
-          _syncLocationPing(j.status);
-          return Stack(
-            children: [
-              RefreshIndicator(
-                onRefresh: () async =>
-                    ref.invalidate(jobDetailProvider(widget.jobId)),
+        data: (j) => Column(
+          children: [
+            Expanded(
+              child: RefreshIndicator(
+                color: AppColors.green,
+                onRefresh: () async {
+                  _refresh();
+                  await ref
+                      .read(jobDetailProvider(widget.jobId).future)
+                      .catchError((_) => j);
+                },
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                   children: [
-                    if (_error != null)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                            color: AppColors.urgent.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(12)),
-                        child: Text(_error!,
-                            style: const TextStyle(
-                                color: AppColors.urgent, fontSize: 12.5)),
-                      ),
+                    if (_error != null) _ErrorBox(text: _error!),
+                    _StatusHint(status: j.status),
                     _JobDetailBody(job: j),
                   ],
                 ),
               ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _ActionBar(
-                  job: j,
-                  submitting: _submitting,
-                  onChangeStatus: _changeStatus,
-                  onStartTravel: () => _startTravel(j),
-                  onMarkPartsPending: () => _markPartsPending(j),
-                  onConfirmAndChangeStatus: _confirmAndChangeStatus,
-                  onReject: _rejectWithReason,
-                  onReload: () =>
-                      ref.invalidate(jobDetailProvider(widget.jobId)),
-                ),
-              ),
-            ],
-          );
-        },
+            ),
+            _ActionBar(
+              job: j,
+              submitting: _submitting,
+              onChangeStatus: _changeStatus,
+              onStartTravel: () => _startTravel(j),
+              onMarkPartsPending: () => _markPartsPending(j),
+              onConfirmAndChangeStatus: _confirmAndChangeStatus,
+              onReject: _rejectWithReason,
+              onReload: _refresh,
+            ),
+          ],
+        ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, __) => Center(
-            child: Text('Could not load this job: $err',
-                style: const TextStyle(color: AppColors.slate500))),
+          child: AppErrorView(
+              error: err,
+              onRetry: () => ref.invalidate(jobDetailProvider(widget.jobId))),
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorBox extends StatelessWidget {
+  final String text;
+  const _ErrorBox({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.urgent.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.urgent.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline_rounded,
+              size: 18, color: AppColors.urgent),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Text(text,
+                  style: const TextStyle(
+                      color: AppColors.urgent, fontSize: 13, height: 1.35))),
+        ],
+      ),
+    );
+  }
+}
+
+// Plain-language "what happens next" for statuses where the technician has
+// no button to press — otherwise the action bar is just empty and it looks
+// like the app is stuck.
+class _StatusHint extends StatelessWidget {
+  final String status;
+  const _StatusHint({required this.status});
+
+  static const _hints = {
+    'ESTIMATE_PENDING':
+        'The estimate is being prepared. Once it is shared, the customer will be asked to approve it.',
+    'ESTIMATE_SHARED':
+        'Estimate sent to the customer. You can start work once they approve it.',
+    'AWAITING_CUSTOMER_APPROVAL':
+        'Waiting for the customer to approve the estimate. This screen updates when they do — pull down to refresh.',
+    'ESTIMATE_REJECTED':
+        'The customer rejected the estimate. The office will close or follow up on this job.',
+    'CUSTOMER_UNAVAILABLE':
+        'Marked as customer unavailable. The office will reschedule this visit.',
+    'REASSIGNMENT_REQUIRED':
+        'You rejected this job. The office will assign it to someone else.',
+    'PAID': 'Payment received. This job is complete.',
+    'CLOSED': 'This job is closed.',
+    'CANCELLED': 'This job was cancelled.',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final hint = _hints[status];
+    if (hint == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: UiCard(
+        color: AppColors.info.withValues(alpha: 0.05),
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.info_outline_rounded,
+                size: 18, color: AppColors.info),
+            const SizedBox(width: 8),
+            Expanded(
+                child: Text(hint,
+                    style: const TextStyle(
+                        fontSize: 13, height: 1.4, color: AppColors.slate700))),
+          ],
+        ),
       ),
     );
   }
@@ -265,17 +281,20 @@ class _ActionBar extends StatelessWidget {
     required this.onReject,
     required this.onReload,
   });
+
   static const _supplementaryEstimateStatuses = {
     'ESTIMATE_APPROVED',
     'WORK_STARTED',
     'WORK_IN_PROGRESS',
     'PARTS_PENDING',
     'ON_HOLD',
-    'SERVICE_COMPLETED',
-    'CUSTOMER_CONFIRMATION_PENDING',
-    'PAYMENT_PENDING',
-    'PARTIALLY_PAID',
   };
+
+  void _open(BuildContext context, Widget screen) {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => screen))
+        .then((_) => onReload());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -289,18 +308,19 @@ class _ActionBar extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(
           16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: Colors.white,
+        border: const Border(top: BorderSide(color: AppColors.hairline)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 16,
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 12,
               offset: const Offset(0, -4))
         ],
       ),
       child: submitting
           ? const Center(
               child: Padding(
-                  padding: EdgeInsets.all(8),
+                  padding: EdgeInsets.all(12),
                   child: CircularProgressIndicator()))
           : Column(
               mainAxisSize: MainAxisSize.min,
@@ -308,17 +328,12 @@ class _ActionBar extends StatelessWidget {
                 if (content != null) content,
                 if (showSupplementaryEstimate)
                   Padding(
-                    padding: EdgeInsets.only(top: content != null ? 10 : 0),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: TextButton.icon(
-                        onPressed: () => Navigator.of(context)
-                            .push(MaterialPageRoute(
-                                builder: (_) => EstimateFormScreen(job: job)))
-                            .then((_) => onReload()),
-                        icon: const Icon(Icons.add_circle_outline, size: 18),
-                        label: const Text('Add Additional Estimate'),
-                      ),
+                    padding: EdgeInsets.only(top: content != null ? 6 : 0),
+                    child: TextButton.icon(
+                      onPressed: () =>
+                          _open(context, EstimateFormScreen(job: job)),
+                      icon: const Icon(Icons.add_circle_outline, size: 18),
+                      label: const Text('Add Additional Estimate'),
                     ),
                   ),
               ],
@@ -327,30 +342,33 @@ class _ActionBar extends StatelessWidget {
   }
 
   Widget? _buildForStatus(BuildContext context) {
-    switch (job.status) {
-      case 'ASSIGNED_TO_EMPLOYEE':
-        return Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppColors.urgent),
-                    foregroundColor: AppColors.urgent),
-                onPressed: onReject,
-                child: const Text('Reject'),
-              ),
+    if (newJobStatuses.contains(job.status)) {
+      return Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.urgent),
+                  foregroundColor: AppColors.urgent),
+              onPressed: onReject,
+              child: const Text('Reject'),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: FilledButton(
-                onPressed: () => onChangeStatus('ACCEPTED'),
-                child: const Text('Accept Job'),
-              ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.green),
+              onPressed: () => onChangeStatus('ACCEPTED'),
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('Accept Job'),
             ),
-          ],
-        );
+          ),
+        ],
+      );
+    }
 
+    switch (job.status) {
       case 'ACCEPTED':
       case 'APPOINTMENT_SCHEDULED':
       case 'RESCHEDULED':
@@ -396,10 +414,7 @@ class _ActionBar extends StatelessWidget {
 
       case 'INSPECTION_STARTED':
         return FilledButton.icon(
-          onPressed: () => Navigator.of(context)
-              .push(MaterialPageRoute(
-                  builder: (_) => InspectionFormScreen(jobId: job.id)))
-              .then((_) => onReload()),
+          onPressed: () => _open(context, InspectionFormScreen(jobId: job.id)),
           icon: const Icon(Icons.fact_check_outlined, size: 18),
           label: const Text('Enter Inspection Details'),
         );
@@ -409,12 +424,9 @@ class _ActionBar extends StatelessWidget {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(context)
-                    .push(MaterialPageRoute(
-                        builder: (_) => EstimateFormScreen(job: job)))
-                    .then((_) => onReload()),
+                onPressed: () => _open(context, EstimateFormScreen(job: job)),
                 icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                label: const Text('Create Estimate'),
+                label: const Text('Estimate'),
               ),
             ),
             const SizedBox(width: 12),
@@ -444,10 +456,8 @@ class _ActionBar extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context)
-                        .push(MaterialPageRoute(
-                            builder: (_) => WorkProgressScreen(jobId: job.id)))
-                        .then((_) => onReload()),
+                    onPressed: () =>
+                        _open(context, WorkProgressScreen(jobId: job.id)),
                     icon: const Icon(Icons.edit_note, size: 18),
                     label: const Text('Work Progress'),
                   ),
@@ -455,10 +465,10 @@ class _ActionBar extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: () => Navigator.of(context)
-                        .push(MaterialPageRoute(
-                            builder: (_) => CompletionScreen(jobId: job.id)))
-                        .then((_) => onReload()),
+                    style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.green),
+                    onPressed: () =>
+                        _open(context, CompletionScreen(jobId: job.id)),
                     icon: const Icon(Icons.task_alt, size: 18),
                     label: const Text('Complete'),
                   ),
@@ -470,10 +480,8 @@ class _ActionBar extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context)
-                        .push(MaterialPageRoute(
-                            builder: (_) => PartsEntryScreen(jobId: job.id)))
-                        .then((_) => onReload()),
+                    onPressed: () =>
+                        _open(context, PartsEntryScreen(jobId: job.id)),
                     icon: const Icon(Icons.inventory_2_outlined, size: 18),
                     label: const Text('Parts Used'),
                   ),
@@ -483,7 +491,7 @@ class _ActionBar extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: onMarkPartsPending,
                     icon: const Icon(Icons.hourglass_empty, size: 18),
-                    label: const Text('Waiting For Parts'),
+                    label: const Text('Need Parts'),
                   ),
                 ),
               ],
@@ -522,11 +530,10 @@ class _ActionBar extends StatelessWidget {
       case 'PAYMENT_PENDING':
       case 'PARTIALLY_PAID':
         return FilledButton.icon(
-          onPressed: () => Navigator.of(context)
-              .push(MaterialPageRoute(builder: (_) => InvoiceScreen(job: job)))
-              .then((_) => onReload()),
+          style: FilledButton.styleFrom(backgroundColor: AppColors.green),
+          onPressed: () => _open(context, InvoiceScreen(job: job)),
           icon: const Icon(Icons.receipt_long_outlined, size: 18),
-          label: const Text('Invoice & Payment'),
+          label: const Text('Invoice & Collect Payment'),
         );
 
       default:
@@ -539,240 +546,251 @@ class _JobDetailBody extends StatelessWidget {
   final JobDetail job;
   const _JobDetailBody({required this.job});
 
+  Future<void> _launch(BuildContext context, Uri uri) async {
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication)
+        .catchError((_) => false);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't open that on this phone.")));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final accent = statusAccentColor(job.status);
+    final when = [
+      if (job.scheduledDate != null) formatDisplayDate(job.scheduledDate),
+      if (job.scheduledSlot != null && job.scheduledSlot!.isNotEmpty)
+        job.scheduledSlot!,
+    ].join(' • ');
+    final urgent = job.priority == 'URGENT' || job.priority == 'HIGH';
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _Card(
+        UiCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                      child: Text(job.serviceName ?? 'Service Request',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 17))),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20)),
-                    child: Text(jobStatusLabel(job.status),
-                        style: TextStyle(
-                            color: accent,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text('#${job.number}',
-                  style: TextStyle(
-                      color: secondaryTextColor(context), fontSize: 12.5)),
-              if (job.scheduledDate != null) ...[
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(Icons.schedule,
-                        size: 16, color: AppColors.slate500),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${job.scheduledDate!.day}/${job.scheduledDate!.month}/${job.scheduledDate!.year}${job.scheduledSlot != null ? ' • ${job.scheduledSlot}' : ''}',
-                      style: const TextStyle(
-                          fontSize: 13.5, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Customer',
-                  style:
-                      TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-              const SizedBox(height: 10),
-              Row(children: [
-                const Icon(Icons.person_outline,
-                    size: 17, color: AppColors.slate500),
-                const SizedBox(width: 8),
-                Text(job.customerName ?? '—')
-              ]),
-              if (job.customerMobile != null) ...[
-                const SizedBox(height: 8),
-                Row(children: [
-                  const Icon(Icons.call_outlined,
-                      size: 17, color: AppColors.slate500),
-                  const SizedBox(width: 8),
-                  Text(job.customerMobile!)
-                ]),
-              ],
-              const SizedBox(height: 8),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.location_on_outlined,
-                      size: 17, color: AppColors.slate500),
-                  const SizedBox(width: 8),
+                  UiIconTile(
+                      icon: Icons.build_outlined, color: accent, size: 44),
+                  const SizedBox(width: 12),
                   Expanded(
-                      child: Text(
-                          job.addressLine.isEmpty ? '—' : job.addressLine)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(job.serviceName ?? 'Service Request',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 17,
+                                color: AppColors.ink)),
+                        const SizedBox(height: 2),
+                        Text('#${job.number}',
+                            style: const TextStyle(
+                                color: AppColors.muted, fontSize: 12.5)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  UiPill(text: jobStatusLabel(job.status), color: accent),
+                  if (urgent)
+                    UiPill(
+                        text: '${job.priority} PRIORITY',
+                        color: AppColors.urgent,
+                        icon: Icons.priority_high_rounded),
+                ],
+              ),
+              if (when.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                UiInfoRow(
+                    icon: Icons.schedule_rounded,
+                    label: 'Appointment',
+                    value: when),
+              ],
+              if (job.slaDueAt != null)
+                UiInfoRow(
+                    icon: Icons.timer_outlined,
+                    label: 'Due by',
+                    value: formatDisplayDateTime(job.slaDueAt)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        const UiSectionLabel('Customer'),
+        UiCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UiInfoRow(
+                  icon: Icons.person_outline_rounded,
+                  label: 'Name',
+                  value: job.customerName ?? '—'),
+              if (job.customerMobile != null)
+                UiInfoRow(
+                    icon: Icons.call_outlined,
+                    label: 'Mobile',
+                    value: '+91 ${job.customerMobile}'),
+              UiInfoRow(
+                  icon: Icons.location_on_outlined,
+                  label: 'Address',
+                  value: job.addressLine.isEmpty ? '—' : job.addressLine),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  if (job.customerMobile != null) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _launch(
+                            context,
+                            Uri(
+                                scheme: 'tel',
+                                path: '+91${job.customerMobile}')),
+                        icon: const Icon(Icons.call_rounded,
+                            size: 18, color: AppColors.green),
+                        label: const Text('Call'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  if (job.addressLine.isNotEmpty)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _launch(
+                            context,
+                            Uri.https('www.google.com', '/maps/dir/', {
+                              'api': '1',
+                              'destination': job.addressLine,
+                            })),
+                        icon: const Icon(Icons.navigation_rounded,
+                            size: 18, color: AppColors.info),
+                        label: const Text('Navigate'),
+                      ),
+                    ),
                 ],
               ),
             ],
           ),
         ),
         if (job.product != null) ...[
-          const SizedBox(height: 12),
-          _Card(
+          const SizedBox(height: 18),
+          UiSectionLabel(
+            'Appliance',
+            trailing: job.product!.warrantyExpiresAt == null
+                ? null
+                : UiPill(
+                    text: job.product!.isUnderWarranty
+                        ? 'Under Warranty'
+                        : 'Warranty Expired',
+                    color: job.product!.isUnderWarranty
+                        ? AppColors.success
+                        : AppColors.slate500),
+          ),
+          UiCard(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Appliance',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 13.5)),
-                    if (job.product!.warrantyExpiresAt != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: (job.product!.isUnderWarranty
-                                  ? AppColors.success
-                                  : AppColors.slate500)
-                              .withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          job.product!.isUnderWarranty
-                              ? 'Under Warranty'
-                              : 'Warranty Expired',
-                          style: TextStyle(
-                              color: job.product!.isUnderWarranty
-                                  ? AppColors.success
-                                  : AppColors.slate500,
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 10),
                 if (job.product!.brand != null ||
                     job.product!.productType != null)
-                  Row(children: [
-                    const Icon(Icons.category_outlined,
-                        size: 17, color: AppColors.slate500),
-                    const SizedBox(width: 8),
-                    Text([job.product!.brand, job.product!.productType]
-                        .where((s) => s != null)
-                        .join(' • ')),
-                  ]),
-                if (job.product!.modelNumber != null) ...[
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    const Icon(Icons.tag, size: 17, color: AppColors.slate500),
-                    const SizedBox(width: 8),
-                    Text('Model: ${job.product!.modelNumber}')
-                  ]),
-                ],
+                  UiInfoRow(
+                      icon: Icons.category_outlined,
+                      label: 'Product',
+                      value: [job.product!.brand, job.product!.productType]
+                          .whereType<String>()
+                          .join(' • ')),
+                if (job.product!.modelNumber != null)
+                  UiInfoRow(
+                      icon: Icons.tag_rounded,
+                      label: 'Model',
+                      value: job.product!.modelNumber!),
+                if (job.product!.warrantyExpiresAt != null)
+                  UiInfoRow(
+                      icon: Icons.verified_user_outlined,
+                      label: 'Warranty till',
+                      value: formatDisplayDate(job.product!.warrantyExpiresAt)),
               ],
             ),
           ),
         ],
         if (job.symptoms.isNotEmpty || (job.notes?.isNotEmpty ?? false)) ...[
-          const SizedBox(height: 12),
-          _Card(
+          const SizedBox(height: 18),
+          const UiSectionLabel('Issue reported'),
+          UiCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Issue Reported',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-                const SizedBox(height: 10),
                 if (job.symptoms.isNotEmpty)
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: job.symptoms
-                        .map((s) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                  color: subtleSurfaceColor(context),
-                                  borderRadius: BorderRadius.circular(20)),
-                              child: Text(s,
-                                  style: const TextStyle(fontSize: 12.5)),
-                            ))
-                        .toList(),
+                    children: [
+                      for (final s in job.symptoms)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                              color: AppColors.slate100,
+                              borderRadius: BorderRadius.circular(20)),
+                          child: Text(s,
+                              style: const TextStyle(
+                                  fontSize: 12.5, color: AppColors.slate700)),
+                        ),
+                    ],
                   ),
                 if (job.notes?.isNotEmpty ?? false) ...[
-                  const SizedBox(height: 10),
+                  if (job.symptoms.isNotEmpty) const SizedBox(height: 10),
                   Text(job.notes!,
-                      style: TextStyle(
-                          color: strongSecondaryTextColor(context),
-                          height: 1.4)),
+                      style: const TextStyle(
+                          color: AppColors.slate700, height: 1.4)),
                 ],
               ],
             ),
           ),
         ],
         if (job.images.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _Card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Photos',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 84,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: job.images.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (context, i) => ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(job.images[i],
-                          width: 84,
-                          height: 84,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                              width: 84,
-                              height: 84,
-                              color: subtleSurfaceColor(context),
-                              child: const Icon(Icons.broken_image_outlined,
-                                  color: AppColors.slate400))),
-                    ),
+          const SizedBox(height: 18),
+          const UiSectionLabel('Photos from customer'),
+          SizedBox(
+            height: 92,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: job.images.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, i) => GestureDetector(
+                onTap: () => showDialog(
+                  context: context,
+                  builder: (_) => Dialog(
+                    clipBehavior: Clip.antiAlias,
+                    child: InteractiveViewer(
+                        child:
+                            Image.network(job.images[i], fit: BoxFit.contain)),
                   ),
                 ),
-              ],
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(job.images[i],
+                      width: 92,
+                      height: 92,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                          width: 92,
+                          height: 92,
+                          color: AppColors.slate100,
+                          child: const Icon(Icons.broken_image_outlined,
+                              color: AppColors.slate400))),
+                ),
+              ),
             ),
           ),
         ],
       ],
     );
-  }
-}
-
-class _Card extends StatelessWidget {
-  final Widget child;
-  const _Card({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(radius: 16, child: child);
   }
 }

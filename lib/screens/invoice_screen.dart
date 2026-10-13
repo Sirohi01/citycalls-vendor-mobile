@@ -4,12 +4,18 @@ import '../models/invoice_models.dart';
 import '../models/job_models.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/form_kit.dart';
+import '../widgets/state_views.dart';
+import '../widgets/ui_kit.dart';
 
 // Per docs/manish/09-vendor-app-functional-plan.md's Payment flow — once a
-// job reaches PAYMENT_PENDING (or PARTIALLY_PAID, if a partial payment was
-// already taken), the technician bills the job with a real Invoice and
-// records the actual payment collected, instead of just flipping the
-// service request's status. Online-only, same as estimate_form_screen.dart.
+// job reaches PAYMENT_PENDING (or PARTIALLY_PAID), the technician bills the
+// job with a real Invoice and records the payment actually collected.
+// Online-only, same as estimate_form_screen.dart.
+//
+// Steps, in order: (1) no invoice yet → bill from the approved estimate (a
+// proforma the customer accepts) or enter items by hand; (2) invoice exists
+// → collect payment against it.
 class InvoiceScreen extends ConsumerWidget {
   final JobDetail job;
   const InvoiceScreen({super.key, required this.job});
@@ -18,13 +24,14 @@ class InvoiceScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final invoiceAsync = ref.watch(invoiceForRequestProvider(job.id));
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Invoice & Payment')),
       body: invoiceAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, __) => Center(
-            child: Text('Could not load invoice: $err',
-                style: const TextStyle(color: AppColors.urgent))),
+          child: AppErrorView(
+              error: err,
+              onRetry: () => ref.invalidate(invoiceForRequestProvider(job.id))),
+        ),
         data: (invoice) => invoice == null
             ? _BillingRouter(job: job)
             : _PaymentView(job: job, invoice: invoice),
@@ -43,14 +50,71 @@ class _BillingRouter extends ConsumerWidget {
     return proformaAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, __) => Center(
-          child: Text('Could not load billing status: $err',
-              style: const TextStyle(color: AppColors.urgent))),
-      data: (proforma) {
-        if (proforma != null) {
-          return _ProformaStatusView(job: job, proforma: proforma);
-        }
-        return _GenerateFromEstimateView(job: job);
-      },
+        child: AppErrorView(
+            error: err,
+            onRetry: () => ref.invalidate(proformaForRequestProvider(job.id))),
+      ),
+      data: (proforma) => proforma != null
+          ? _ProformaStatusView(job: job, proforma: proforma)
+          : _GenerateFromEstimateView(job: job),
+    );
+  }
+}
+
+// Centered "where this bill stands" card used by the estimate/proforma steps.
+class _StatusPanel extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final double amount;
+  final String message;
+  final String? error;
+  final List<Widget> actions;
+  const _StatusPanel({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.amount,
+    required this.message,
+    required this.actions,
+    this.error,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+      children: [
+        UiCard(
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(child: UiIconTile(icon: icon, color: color, size: 60)),
+              const SizedBox(height: 16),
+              Text(title,
+                  textAlign: TextAlign.center,
+                  style:
+                      const TextStyle(fontSize: 13.5, color: AppColors.muted)),
+              const SizedBox(height: 4),
+              Text(formatRupees(amount),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink)),
+              const SizedBox(height: 10),
+              Text(message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 13, height: 1.45, color: AppColors.muted)),
+              const SizedBox(height: 20),
+              InlineError(error),
+              ...actions,
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -81,7 +145,7 @@ class _GenerateFromEstimateViewState
           .generateProformaInvoice(widget.job.id);
       ref.invalidate(proformaForRequestProvider(widget.job.id));
     } catch (e) {
-      setState(() => _error = 'Failed to generate bill: $e');
+      if (mounted) setState(() => _error = describeError(e));
     } finally {
       if (mounted) setState(() => _generating = false);
     }
@@ -95,65 +159,36 @@ class _GenerateFromEstimateViewState
         ref.watch(approvedEstimateForRequestProvider(widget.job.id));
     return estimateAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, __) => Center(
-          child: Text('Could not check for an approved estimate: $err',
-              style: const TextStyle(color: AppColors.urgent))),
+      // No approved estimate we can read is not a dead end — the technician
+      // can always bill by hand.
+      error: (_, __) => _CreateInvoiceView(job: widget.job),
       data: (estimate) {
         if (estimate == null) return _CreateInvoiceView(job: widget.job);
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.receipt_long_outlined,
-                    size: 48, color: AppColors.primary),
-                const SizedBox(height: 16),
-                Text('Approved estimate ${estimate.number}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 6),
-                Text('₹${estimate.total.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary)),
-                const SizedBox(height: 8),
-                const Text(
-                  'The bill will use the exact items and amount the customer already approved. They will get one final confirmation to accept it before it becomes the invoice.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.slate500, fontSize: 12.5),
-                ),
-                const SizedBox(height: 20),
-                if (_error != null)
-                  Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(_error!,
-                          style: const TextStyle(
-                              color: AppColors.urgent, fontSize: 12.5))),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _generating ? null : _generate,
-                    icon: _generating
-                        ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.send_outlined, size: 18),
-                    label: Text(_generating
-                        ? 'Generating...'
-                        : 'Generate Bill for Customer'),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => setState(() => _manualOverride = true),
-                  child: const Text('Bill this differently instead'),
-                ),
-              ],
+        return _StatusPanel(
+          icon: Icons.receipt_long_outlined,
+          color: AppColors.green,
+          title: 'Approved estimate ${estimate.number}',
+          amount: estimate.total,
+          message:
+              'The bill will use the exact items and amount the customer already approved. They get one final confirmation in their app before it becomes the invoice.',
+          error: _error,
+          actions: [
+            FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.green),
+              onPressed: _generating ? null : _generate,
+              icon: _generating
+                  ? const ButtonSpinner(color: AppColors.muted)
+                  : const Icon(Icons.send_outlined, size: 18),
+              label:
+                  Text(_generating ? 'Generating…' : 'Send Bill to Customer'),
             ),
-          ),
+            TextButton(
+              onPressed: _generating
+                  ? null
+                  : () => setState(() => _manualOverride = true),
+              child: const Text('Bill different items instead'),
+            ),
+          ],
         );
       },
     );
@@ -187,7 +222,7 @@ class _ProformaStatusViewState extends ConsumerState<_ProformaStatusView> {
           .convertProformaToInvoice(widget.proforma.id);
       ref.invalidate(invoiceForRequestProvider(widget.job.id));
     } catch (e) {
-      setState(() => _error = 'Failed to create the final invoice: $e');
+      if (mounted) setState(() => _error = describeError(e));
     } finally {
       if (mounted) setState(() => _converting = false);
     }
@@ -196,67 +231,35 @@ class _ProformaStatusViewState extends ConsumerState<_ProformaStatusView> {
   @override
   Widget build(BuildContext context) {
     final accepted = widget.proforma.status == 'ACCEPTED';
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-                accepted
-                    ? Icons.check_circle_outline
-                    : Icons.hourglass_top_outlined,
-                size: 48,
-                color: accepted ? AppColors.success : AppColors.warning),
-            const SizedBox(height: 16),
-            Text(widget.proforma.number,
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 6),
-            Text('₹${widget.proforma.total.toStringAsFixed(0)}',
-                style:
-                    const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(
-              accepted
-                  ? 'The customer accepted the bill. Create the final invoice below.'
-                  : 'Waiting for the customer to accept the bill in their app.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.slate500, fontSize: 12.5),
-            ),
-            const SizedBox(height: 20),
-            if (_error != null)
-              Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(_error!,
-                      style: const TextStyle(
-                          color: AppColors.urgent, fontSize: 12.5))),
-            if (accepted)
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _converting ? null : _convert,
-                  icon: _converting
-                      ? const SizedBox(
-                          height: 16,
-                          width: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.receipt_outlined, size: 18),
-                  label: Text(
-                      _converting ? 'Creating...' : 'Create Final Invoice'),
-                ),
-              )
-            else
-              OutlinedButton.icon(
-                onPressed: () =>
-                    ref.invalidate(proformaForRequestProvider(widget.job.id)),
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Check Again'),
-              ),
-          ],
-        ),
-      ),
+    return _StatusPanel(
+      icon: accepted
+          ? Icons.check_circle_outline_rounded
+          : Icons.hourglass_top_rounded,
+      color: accepted ? AppColors.success : AppColors.warning,
+      title: 'Bill ${widget.proforma.number}',
+      amount: widget.proforma.total,
+      message: accepted
+          ? 'The customer accepted the bill. Create the final invoice to collect payment.'
+          : 'Waiting for the customer to accept the bill in their app. Ask them to open CityCalls and accept it.',
+      error: _error,
+      actions: [
+        if (accepted)
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.green),
+            onPressed: _converting ? null : _convert,
+            icon: _converting
+                ? const ButtonSpinner(color: AppColors.muted)
+                : const Icon(Icons.receipt_outlined, size: 18),
+            label: Text(_converting ? 'Creating…' : 'Create Final Invoice'),
+          )
+        else
+          OutlinedButton.icon(
+            onPressed: () =>
+                ref.invalidate(proformaForRequestProvider(widget.job.id)),
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Check Again'),
+          ),
+      ],
     );
   }
 }
@@ -275,18 +278,26 @@ class _CreateInvoiceViewState extends ConsumerState<_CreateInvoiceView> {
   String? _error;
 
   Future<void> _addItem() async {
-    final item = await showModalBottomSheet<InvoiceLineItem>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const _AddInvoiceLineItemSheet(),
-    );
-    if (item != null) setState(() => _items.add(item));
+    final input = await showLineItemSheet(context,
+        title: 'Add line item',
+        nameLabel: 'Description',
+        nameHint: 'e.g. Labour charge');
+    if (input == null) return;
+    setState(() {
+      _error = null;
+      _items.add(InvoiceLineItem(
+          description: input.name, qty: input.qty, unitPrice: input.unitPrice));
+    });
   }
 
   Future<void> _create() async {
     if (_items.isEmpty) {
       setState(() => _error = 'Add at least one line item before billing.');
+      return;
+    }
+    if (widget.job.branchId.isEmpty || widget.job.customerId.isEmpty) {
+      setState(() => _error =
+          'This job has no branch assigned yet, so it cannot be billed from the app. Please ask the office to create the invoice.');
       return;
     }
     setState(() {
@@ -302,7 +313,7 @@ class _CreateInvoiceViewState extends ConsumerState<_CreateInvoiceView> {
           );
       ref.invalidate(invoiceForRequestProvider(widget.job.id));
     } catch (e) {
-      setState(() => _error = 'Failed to create invoice: $e');
+      if (mounted) setState(() => _error = describeError(e));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -313,132 +324,72 @@ class _CreateInvoiceViewState extends ConsumerState<_CreateInvoiceView> {
     final total = _items.fold<double>(0, (sum, i) => sum + i.total);
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Text(
-            'Bill this job for labour and parts used. Once created, you can collect payment against it.',
-            style:
-                TextStyle(fontSize: 12.5, color: secondaryTextColor(context)),
-          ),
-        ),
         Expanded(
-          child: _items.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.receipt_outlined,
-                          size: 48, color: secondaryTextColor(context)),
-                      const SizedBox(height: 12),
-                      Text('No line items added yet.',
-                          style: TextStyle(color: secondaryTextColor(context))),
-                    ],
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            children: [
+              const InfoNote(
+                  'Bill this job for the labour and parts used. Once the invoice is created you can collect payment against it.'),
+              const SizedBox(height: 20),
+              if (_items.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 40),
+                  child: UiEmptyState(
+                    icon: Icons.receipt_outlined,
+                    title: 'No items yet',
+                    message: 'Add each charge as a line item.',
+                    actionLabel: 'Add Item',
+                    onAction: _addItem,
                   ),
                 )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, i) {
-                    final item = _items[i];
-                    return GlassCard(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(item.description,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 14)),
-                                const SizedBox(height: 2),
-                                Text(
-                                    '${item.qty} × ₹${item.unitPrice.toStringAsFixed(0)}',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: secondaryTextColor(context))),
-                              ],
-                            ),
-                          ),
-                          Text('₹${item.total.toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 14)),
-                          IconButton(
-                            icon: const Icon(Icons.close,
-                                size: 18, color: AppColors.urgent),
-                            onPressed: () => setState(() => _items.removeAt(i)),
-                          ),
-                        ],
+              else ...[
+                UiSectionLabel('${_items.length} item(s)'),
+                for (var i = 0; i < _items.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: LineItemTile(
+                      name: _items[i].description,
+                      qty: _items[i].qty,
+                      unitPrice: _items[i].unitPrice,
+                      onRemove: () => setState(() => _items.removeAt(i)),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+        if (_items.isNotEmpty || _error != null)
+          BottomActionBar(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                InlineError(_error),
+                if (_items.isNotEmpty) TotalRow(amount: total),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _submitting ? null : _addItem,
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Add Item'),
                       ),
-                    );
-                  },
-                ),
-        ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child:
-                Text(_error!, style: const TextStyle(color: AppColors.urgent)),
-          ),
-        Container(
-          padding: EdgeInsets.fromLTRB(
-              16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 16,
-                  offset: const Offset(0, -4))
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_items.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Total',
-                          style: TextStyle(color: secondaryTextColor(context))),
-                      Text('₹${total.toStringAsFixed(0)}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16)),
-                    ],
-                  ),
-                ),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _addItem,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Add Item'),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: _submitting ? null : _create,
-                      child: _submitting
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
-                          : const Text('Create Invoice'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed:
+                            _submitting || _items.isEmpty ? null : _create,
+                        child: _submitting
+                            ? const ButtonSpinner()
+                            : const Text('Create Invoice'),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
@@ -454,30 +405,80 @@ class _PaymentView extends ConsumerStatefulWidget {
 }
 
 class _PaymentViewState extends ConsumerState<_PaymentView> {
-  late double _amount;
-  String _method = 'CASH';
+  // What a technician can actually take at the door. GATEWAY/CREDIT exist on
+  // the API (paymentMethods) but are office-side methods.
+  static const _methods = {
+    'CASH': (Icons.payments_outlined, 'Cash'),
+    'UPI': (Icons.qr_code_2_rounded, 'UPI'),
+    'CARD': (Icons.credit_card_rounded, 'Card'),
+    'BANK_TRANSFER': (Icons.account_balance_outlined, 'Bank'),
+    'CHEQUE': (Icons.edit_document, 'Cheque'),
+  };
+
+  late final TextEditingController _amountController;
   final _referenceController = TextEditingController();
+  String _method = 'CASH';
   bool _submitting = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _amount = widget.invoice.outstanding;
+    _amountController =
+        TextEditingController(text: _plain(widget.invoice.outstanding));
   }
+
+  // After a part payment the widget rebuilds with a new invoice — reset the
+  // amount to what is still owed.
+  @override
+  void didUpdateWidget(covariant _PaymentView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.invoice.outstanding != widget.invoice.outstanding) {
+      _amountController.text = _plain(widget.invoice.outstanding);
+      _referenceController.clear();
+    }
+  }
+
+  static String _plain(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 
   @override
   void dispose() {
+    _amountController.dispose();
     _referenceController.dispose();
     super.dispose();
   }
 
   Future<void> _recordPayment() async {
-    if (_amount <= 0 || _amount > widget.invoice.outstanding) {
+    final outstanding = widget.invoice.outstanding;
+    final amount = double.tryParse(_amountController.text.trim()) ?? 0;
+    if (amount <= 0 || amount > outstanding + 0.001) {
       setState(() => _error =
-          'Amount must be between ₹0.01 and ₹${widget.invoice.outstanding.toStringAsFixed(0)}.');
+          'Enter an amount between ₹1 and ${formatRupees(outstanding)}.');
       return;
     }
+    final reference = _referenceController.text.trim();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Record this payment?'),
+        content: Text(
+            '${formatRupees(amount)} received by ${_methods[_method]!.$2}. This cannot be undone from the app.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.green,
+                  minimumSize: const Size(110, 44)),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Confirm')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     setState(() {
       _submitting = true;
       _error = null;
@@ -485,17 +486,20 @@ class _PaymentViewState extends ConsumerState<_PaymentView> {
     try {
       await ref.read(invoiceRepositoryProvider).recordPayment(
             widget.invoice.id,
-            amount: _amount,
+            amount: amount,
             method: _method,
-            reference: _referenceController.text.trim().isEmpty
-                ? null
-                : _referenceController.text.trim(),
+            reference: reference.isEmpty ? null : reference,
           );
       ref.invalidate(invoiceForRequestProvider(widget.job.id));
+      ref.invalidate(paymentsForInvoiceProvider(widget.invoice.id));
       ref.invalidate(jobDetailProvider(widget.job.id));
-      ref.invalidate(myJobsProvider);
+      ref.invalidate(allJobsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${formatRupees(amount)} payment recorded.')));
+      }
     } catch (e) {
-      setState(() => _error = 'Failed to record payment: $e');
+      if (mounted) setState(() => _error = describeError(e));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -504,246 +508,209 @@ class _PaymentViewState extends ConsumerState<_PaymentView> {
   @override
   Widget build(BuildContext context) {
     final invoice = widget.invoice;
-    final settled = invoice.outstanding <= 0;
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    final settled = invoice.outstanding <= 0.001;
+    final payments =
+        ref.watch(paymentsForInvoiceProvider(invoice.id)).valueOrNull ??
+            const <PaymentReceipt>[];
+
+    return Column(
       children: [
-        GlassCard(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(invoice.number,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text(invoice.status.replaceAll('_', ' '),
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: settled ? Colors.green : AppColors.gold400)),
+        Expanded(
+          child: RefreshIndicator(
+            color: AppColors.green,
+            onRefresh: () async {
+              ref.invalidate(invoiceForRequestProvider(widget.job.id));
+              ref.invalidate(paymentsForInvoiceProvider(invoice.id));
+            },
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              children: [
+                UiCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text('Invoice ${invoice.number}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                    color: AppColors.ink)),
+                          ),
+                          UiPill(
+                              text: invoice.status.replaceAll('_', ' '),
+                              color: settled
+                                  ? AppColors.success
+                                  : AppColors.warning),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(settled ? 'Paid in full' : 'Amount to collect',
+                          style: const TextStyle(
+                              fontSize: 12.5, color: AppColors.muted)),
+                      const SizedBox(height: 2),
+                      Text(
+                          formatRupees(
+                              settled ? invoice.total : invoice.outstanding),
+                          style: TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.w700,
+                              color:
+                                  settled ? AppColors.success : AppColors.ink)),
+                      const Divider(height: 24),
+                      _kv('Invoice total', formatRupees(invoice.total)),
+                      _kv('Already paid', formatRupees(invoice.amountPaid)),
+                    ],
+                  ),
+                ),
+                if (!settled) ...[
+                  const SizedBox(height: 22),
+                  const UiSectionLabel('Payment method'),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final m in _methods.entries)
+                        ChoiceChip(
+                          avatar: Icon(m.value.$1,
+                              size: 16,
+                              color: _method == m.key
+                                  ? AppColors.green
+                                  : AppColors.muted),
+                          label: Text(m.value.$2),
+                          selected: _method == m.key,
+                          showCheckmark: false,
+                          onSelected: (_) => setState(() => _method = m.key),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  const UiSectionLabel('Amount received'),
+                  UiCard(
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: _amountController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.w700),
+                          decoration: const InputDecoration(
+                              labelText: 'Amount',
+                              prefixIcon:
+                                  Icon(Icons.currency_rupee_rounded, size: 20)),
+                        ),
+                        if (_method != 'CASH') ...[
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _referenceController,
+                            decoration: InputDecoration(
+                              labelText: _method == 'CHEQUE'
+                                  ? 'Cheque number'
+                                  : 'Transaction / reference ID',
+                              hintText: 'Optional',
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ],
-              ),
-              const SizedBox(height: 12),
-              _kv(context, 'Total', '₹${invoice.total.toStringAsFixed(0)}'),
-              _kv(context, 'Paid', '₹${invoice.amountPaid.toStringAsFixed(0)}'),
-              _kv(context, 'Outstanding',
-                  '₹${invoice.outstanding.toStringAsFixed(0)}',
-                  bold: true),
+                if (payments.isNotEmpty) ...[
+                  const SizedBox(height: 22),
+                  const UiSectionLabel('Payments received'),
+                  UiCard(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    child: Column(
+                      children: [
+                        for (final p in payments)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle_rounded,
+                                    size: 18, color: AppColors.success),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(p.method.replaceAll('_', ' '),
+                                          style: const TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.ink)),
+                                      Text(
+                                          [p.number, p.reference]
+                                              .whereType<String>()
+                                              .join(' • '),
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.muted)),
+                                    ],
+                                  ),
+                                ),
+                                Text(formatRupees(p.amount),
+                                    style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.ink)),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        BottomActionBar(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              InlineError(_error),
+              if (settled)
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: const Text('Done'),
+                )
+              else
+                FilledButton(
+                  style:
+                      FilledButton.styleFrom(backgroundColor: AppColors.green),
+                  onPressed: _submitting ? null : _recordPayment,
+                  child: _submitting
+                      ? const ButtonSpinner(color: AppColors.muted)
+                      : const Text('Record Payment'),
+                ),
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        if (settled)
-          GlassCard(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: const [
-                Icon(Icons.check_circle, color: Colors.green, size: 20),
-                SizedBox(width: 8),
-                Expanded(
-                    child: Text(
-                        'Fully paid. Nothing more to collect on this job.')),
-              ],
-            ),
-          )
-        else ...[
-          Text('Record Payment',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: secondaryTextColor(context))),
-          const SizedBox(height: 10),
-          GlassCard(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        initialValue: _amount.toStringAsFixed(0),
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        decoration:
-                            const InputDecoration(labelText: 'Amount (₹)'),
-                        onChanged: (v) =>
-                            setState(() => _amount = double.tryParse(v) ?? 0),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: _method,
-                        decoration: const InputDecoration(labelText: 'Method'),
-                        items: paymentMethods
-                            .map((m) => DropdownMenuItem(
-                                value: m, child: Text(m.replaceAll('_', ' '))))
-                            .toList(),
-                        onChanged: (v) => setState(() => _method = v ?? 'CASH'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _referenceController,
-                  decoration: const InputDecoration(
-                      labelText: 'Reference (optional)',
-                      hintText: 'Transaction ID / cheque no.'),
-                ),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Text(_error!,
-                        style: const TextStyle(
-                            color: AppColors.urgent, fontSize: 12.5)),
-                  ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: _submitting ? null : _recordPayment,
-                  child: _submitting
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : Text('Record Payment (₹${_amount.toStringAsFixed(0)})'),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }
 
-  Widget _kv(BuildContext context, String label, String value,
-      {bool bold = false}) {
+  Widget _kv(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: secondaryTextColor(context))),
+          Text(label,
+              style: const TextStyle(fontSize: 13.5, color: AppColors.muted)),
           Text(value,
-              style: TextStyle(
-                  fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-                  fontSize: bold ? 16 : 14)),
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: AppColors.ink)),
         ],
-      ),
-    );
-  }
-}
-
-class _AddInvoiceLineItemSheet extends StatefulWidget {
-  const _AddInvoiceLineItemSheet();
-
-  @override
-  State<_AddInvoiceLineItemSheet> createState() =>
-      _AddInvoiceLineItemSheetState();
-}
-
-class _AddInvoiceLineItemSheetState extends State<_AddInvoiceLineItemSheet> {
-  final _descController = TextEditingController();
-  final _qtyController = TextEditingController(text: '1');
-  final _priceController = TextEditingController();
-  String? _error;
-
-  @override
-  void dispose() {
-    _descController.dispose();
-    _qtyController.dispose();
-    _priceController.dispose();
-    super.dispose();
-  }
-
-  void _save() {
-    final description = _descController.text.trim();
-    final qty = int.tryParse(_qtyController.text.trim());
-    final price = double.tryParse(_priceController.text.trim());
-    if (description.isEmpty ||
-        qty == null ||
-        qty <= 0 ||
-        price == null ||
-        price < 0) {
-      setState(
-          () => _error = 'Enter a valid description, quantity, and price.');
-      return;
-    }
-    Navigator.of(context).pop(
-        InvoiceLineItem(description: description, qty: qty, unitPrice: price));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                    color: secondaryTextColor(context).withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            const Text('Add Line Item',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _descController,
-              decoration: const InputDecoration(
-                  labelText: 'Description (e.g. Labour charge)'),
-              textCapitalization: TextCapitalization.sentences,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _qtyController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Quantity'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _priceController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration:
-                        const InputDecoration(labelText: 'Unit price (₹)'),
-                  ),
-                ),
-              ],
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Text(_error!,
-                    style: const TextStyle(
-                        color: AppColors.urgent, fontSize: 12.5)),
-              ),
-            const SizedBox(height: 20),
-            FilledButton(onPressed: _save, child: const Text('Add')),
-          ],
-        ),
       ),
     );
   }

@@ -45,6 +45,14 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>CityCalls Field uses the camera to take before/after photos of the work you do.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>CityCalls Field needs your photos so you can attach service photos to a job.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>CityCalls Field shows your current location on the dashboard map and shares it with the customer while you're en route to a job.</string>
 </dict>

@@ -26,11 +26,14 @@ class AppNotification {
     return AppNotification(
       id: json['_id'] as String,
       subject: json['subject'] as String?,
-      body: json['body'] as String,
-      channel: json['channel'] as String,
-      status: json['status'] as String,
-      readAt: json['readAt'] != null ? DateTime.tryParse(json['readAt'] as String) : null,
-      createdAt: DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now(),
+      body: json['body'] as String? ?? '',
+      channel: json['channel'] as String? ?? '',
+      status: json['status'] as String? ?? '',
+      readAt: json['readAt'] != null
+          ? DateTime.tryParse(json['readAt'] as String)
+          : null,
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }

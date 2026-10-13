@@ -3,14 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/job_models.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
-import 'job_detail_screen.dart';
+import '../widgets/job_card.dart';
+import '../widgets/state_views.dart';
+import '../widgets/ui_kit.dart';
 
-// Per docs/rohit/06-vendor-app-screen-list.md "History" — Completed Jobs
-// History. Read-only list of the technician's own completed/closed/paid/
-// cancelled jobs; tapping through reuses the same JobDetailScreen as My Jobs
-// (that doc's "Job Detail (past, read-only)" is functionally identical to
-// the active-job detail view today, since Execution actions aren't built
-// yet either way).
+// Per docs/rohit/06-vendor-app-screen-list.md "History" — the technician's
+// own paid/closed/cancelled jobs, newest first. Tapping through reuses
+// JobDetailScreen (which shows no actions for a finished job).
 class JobHistoryScreen extends ConsumerWidget {
   const JobHistoryScreen({super.key});
 
@@ -19,19 +18,26 @@ class JobHistoryScreen extends ConsumerWidget {
     final jobs = ref.watch(completedJobsProvider);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(title: const Text('Job History')),
+      appBar: AppBar(title: const Text('Job History'), titleSpacing: 16),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(completedJobsProvider),
+        color: AppColors.green,
+        onRefresh: () async {
+          ref.invalidate(allJobsProvider);
+          await ref
+              .read(allJobsProvider.future)
+              .catchError((_) => <JobSummary>[]);
+        },
         child: jobs.when(
           data: (items) {
             if (items.isEmpty) {
               return ListView(
                 children: const [
-                  SizedBox(height: 120),
-                  Icon(Icons.history, size: 56, color: AppColors.slate400),
-                  SizedBox(height: 12),
-                  Center(child: Text('No completed jobs yet.', style: TextStyle(color: AppColors.slate500))),
+                  SizedBox(height: 100),
+                  UiEmptyState(
+                    icon: Icons.history_rounded,
+                    title: 'No completed jobs yet',
+                    message: 'Jobs you finish will be listed here.',
+                  ),
                 ],
               );
             }
@@ -40,59 +46,29 @@ class JobHistoryScreen extends ConsumerWidget {
                 final bTime = b.scheduledDate?.millisecondsSinceEpoch ?? 0;
                 return bTime.compareTo(aTime);
               });
-            return ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: sorted.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, i) => _HistoryCard(job: sorted[i]),
+            final paid = items
+                .where((j) => j.status == 'PAID' || j.status == 'CLOSED')
+                .length;
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              children: [
+                UiSectionLabel(
+                    '$paid completed • ${items.length - paid} other'),
+                for (final j in sorted)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: JobCard(job: j, compact: true),
+                  ),
+              ],
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, __) => Center(child: Text('Could not load history: $err', style: const TextStyle(color: AppColors.slate500))),
-        ),
-      ),
-    );
-  }
-}
-
-class _HistoryCard extends StatelessWidget {
-  final JobSummary job;
-  const _HistoryCard({required this.job});
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = statusAccentColor(job.status);
-    return GlassCard(
-      padding: EdgeInsets.zero,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => JobDetailScreen(jobId: job.id))),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), shape: BoxShape.circle),
-                  child: Icon(Icons.check, color: accent, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(job.serviceName ?? 'Service Request', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                      const SizedBox(height: 2),
-                      Text('#${job.number} • ${job.customerName ?? ''}', style: const TextStyle(color: AppColors.slate500, fontSize: 12), overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                ),
-                Text(jobStatusLabel(job.status), style: TextStyle(color: accent, fontSize: 11.5, fontWeight: FontWeight.w600)),
-              ],
-            ),
+          error: (err, __) => ListView(
+            children: [
+              const SizedBox(height: 80),
+              AppErrorView(
+                  error: err, onRetry: () => ref.invalidate(allJobsProvider)),
+            ],
           ),
         ),
       ),

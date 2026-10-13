@@ -6,6 +6,9 @@
 
 const _statusLabels = {
   'ASSIGNED_TO_EMPLOYEE': 'New — Awaiting Response',
+  'ASSIGNED_TO_VENDOR': 'New — Awaiting Response',
+  'ASSIGNED_TO_TEAM': 'New — Awaiting Response',
+  'OUTSOURCED': 'New — Awaiting Response',
   'ACCEPTED': 'Accepted',
   'APPOINTMENT_SCHEDULED': 'Appointment Scheduled',
   'RESCHEDULED': 'Rescheduled',
@@ -50,14 +53,15 @@ class PartEntry {
   double get total => qty * unitPrice;
 }
 
+// Jobs with nothing left for the technician to do. SERVICE_COMPLETED →
+// CUSTOMER_CONFIRMATION_PENDING → PAYMENT_PENDING still need the technician
+// (send for confirmation, collect payment), so they stay in My Jobs rather
+// than disappearing into History before the money is collected.
 const _completedJobStatuses = {
-  'SERVICE_COMPLETED',
-  'CUSTOMER_CONFIRMATION_PENDING',
-  'PAYMENT_PENDING',
-  'PARTIALLY_PAID',
   'PAID',
   'CLOSED',
   'CANCELLED',
+  'REASSIGNMENT_REQUIRED',
 };
 bool isCompletedJobStatus(String status) =>
     _completedJobStatuses.contains(status);
@@ -241,8 +245,10 @@ class JobDetail {
       serviceName: service?['name'] as String?,
       customerName: customer?['name'] as String?,
       customerMobile: customer?['mobile'] as String?,
-      customerId: json['customerId'] as String,
-      branchId: json['branchId'] as String,
+      // branchId is optional on the API model — a job dispatched straight
+      // to a vendor can have none, and a hard cast here crashed Job Detail.
+      customerId: json['customerId'] as String? ?? '',
+      branchId: json['branchId'] as String? ?? '',
       addressLine: addressParts,
       symptoms: (json['symptoms'] as List? ?? []).cast<String>(),
       notes: json['notes'] as String?,

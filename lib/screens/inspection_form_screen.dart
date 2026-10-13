@@ -3,7 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/job_models.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/form_kit.dart';
+import '../widgets/state_views.dart';
+import '../widgets/ui_kit.dart';
 
+// Inspection & diagnosis — what the technician found. Quick-pick chips come
+// from the service's own Master lists (GET /services/:id/diagnostics); free
+// text is always allowed. Saving moves the job to INSPECTION_COMPLETED.
 class InspectionFormScreen extends ConsumerStatefulWidget {
   final String jobId;
   const InspectionFormScreen({super.key, required this.jobId});
@@ -33,17 +39,16 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
     final value = _symptomController.text.trim();
     if (value.isEmpty) return;
     setState(() {
-      _symptoms.add(value);
+      if (!_symptoms.contains(value)) _symptoms.add(value);
       _symptomController.clear();
     });
   }
 
   Future<void> _submit() async {
-    if (_defectController.text.trim().isEmpty &&
-        _symptoms.isEmpty &&
-        _solutionController.text.trim().isEmpty) {
+    _addSymptom();
+    if (_defectController.text.trim().isEmpty && _symptoms.isEmpty) {
       setState(() =>
-          _error = 'Enter at least the defect found or symptoms observed.');
+          _error = 'Enter the defect you found, or at least one symptom.');
       return;
     }
     setState(() {
@@ -60,141 +65,156 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
       );
       await repo.changeStatus(widget.jobId, 'INSPECTION_COMPLETED');
       ref.invalidate(jobDetailProvider(widget.jobId));
+      ref.invalidate(allJobsProvider);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      setState(() => _error = 'Failed to save: $e');
+      if (mounted) setState(() => _error = describeError(e));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
+  // Tapping a chip fills the field (single-choice suggestions).
   Widget _quickPicks(
       List<MasterOption> options, TextEditingController controller) {
     if (options.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: 10),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: options
-            .map((o) => ActionChip(
-                  label: Text(o.label, style: const TextStyle(fontSize: 12.5)),
-                  onPressed: () => setState(() => controller.text = o.label),
-                  backgroundColor: AppColors.slate100,
-                ))
-            .toList(),
-      ),
-    );
-  }
-
-  Widget _symptomQuickPicks(List<MasterOption> options) {
-    if (options.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: options
-            .map((o) => FilterChip(
-                  label: Text(o.label, style: const TextStyle(fontSize: 12.5)),
-                  selected: _symptoms.contains(o.label),
-                  onSelected: (v) => setState(() =>
-                      v ? _symptoms.add(o.label) : _symptoms.remove(o.label)),
-                  showCheckmark: false,
-                  selectedColor: AppColors.primaryLight,
-                ))
-            .toList(),
+        children: [
+          for (final o in options)
+            ChoiceChip(
+              label: Text(o.label),
+              selected: controller.text.trim() == o.label,
+              showCheckmark: false,
+              onSelected: (_) => setState(() => controller.text = o.label),
+            ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final jobAsync = ref.watch(jobDetailProvider(widget.jobId));
-    final serviceId = jobAsync.valueOrNull?.serviceId;
-    final diagnosticsAsync = serviceId != null
-        ? ref.watch(serviceDiagnosticsProvider(serviceId))
-        : null;
-    final diagnostics = diagnosticsAsync?.valueOrNull;
+    final serviceId =
+        ref.watch(jobDetailProvider(widget.jobId)).valueOrNull?.serviceId;
+    final diagnostics = serviceId == null
+        ? null
+        : ref.watch(serviceDiagnosticsProvider(serviceId)).valueOrNull;
+    // Master symptoms plus anything typed by hand, as one multi-select set.
+    final symptomOptions = <String>{
+      ...?diagnostics?.symptoms.map((o) => o.label),
+      ..._symptoms,
+    };
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Inspection & Diagnosis')),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          const Text('Defect Found',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-          const SizedBox(height: 8),
-          TextField(
-              controller: _defectController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                  hintText: 'What did you find wrong with the appliance?')),
-          if (diagnostics != null)
-            _quickPicks(diagnostics.defects, _defectController),
-          const SizedBox(height: 20),
-          const Text('Symptoms Observed',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _symptomController,
-                  decoration:
-                      const InputDecoration(hintText: 'e.g. Unusual noise'),
-                  onSubmitted: (_) => _addSymptom(),
+          const UiSectionLabel('Defect found'),
+          UiCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _defectController,
+                  maxLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                      hintText: 'What did you find wrong with the appliance?'),
                 ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                  onPressed: _addSymptom, icon: const Icon(Icons.add)),
-            ],
-          ),
-          if (diagnostics != null) _symptomQuickPicks(diagnostics.symptoms),
-          if (_symptoms.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _symptoms
-                  .map((s) => Chip(
-                        label: Text(s, style: const TextStyle(fontSize: 12.5)),
-                        onDeleted: () => setState(() => _symptoms.remove(s)),
-                        backgroundColor: AppColors.primaryLight,
-                      ))
-                  .toList(),
+                if (diagnostics != null)
+                  _quickPicks(diagnostics.defects, _defectController),
+              ],
             ),
-          ],
-          const SizedBox(height: 20),
-          const Text('Suggested Solution',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-          const SizedBox(height: 8),
-          TextField(
-              controller: _solutionController,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                  hintText: 'e.g. Compressor replacement needed')),
-          if (diagnostics != null)
-            _quickPicks(diagnostics.solutionTypes, _solutionController),
-          if (_error != null)
-            Padding(
-                padding: const EdgeInsets.only(top: 14),
-                child: Text(_error!,
-                    style: const TextStyle(color: AppColors.urgent))),
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _submitting ? null : _submit,
-            child: _submitting
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Text('Save & Complete Inspection'),
+          ),
+          const SizedBox(height: 22),
+          const UiSectionLabel('Symptoms observed'),
+          UiCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (symptomOptions.isNotEmpty) ...[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final s in symptomOptions)
+                        FilterChip(
+                          label: Text(s),
+                          selected: _symptoms.contains(s),
+                          showCheckmark: false,
+                          onSelected: (v) => setState(
+                              () => v ? _symptoms.add(s) : _symptoms.remove(s)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _symptomController,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                            hintText: 'Add another, e.g. Unusual noise'),
+                        onSubmitted: (_) => _addSymptom(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      onPressed: _addSymptom,
+                      tooltip: 'Add symptom',
+                      style: IconButton.styleFrom(
+                          backgroundColor: AppColors.green,
+                          minimumSize: const Size(48, 48)),
+                      icon: const Icon(Icons.add_rounded),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          const UiSectionLabel('Suggested solution'),
+          UiCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _solutionController,
+                  maxLines: 2,
+                  textCapitalization: TextCapitalization.sentences,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                      hintText: 'e.g. Compressor replacement needed'),
+                ),
+                if (diagnostics != null)
+                  _quickPicks(diagnostics.solutionTypes, _solutionController),
+              ],
+            ),
           ),
         ],
+      ),
+      bottomNavigationBar: BottomActionBar(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InlineError(_error),
+            FilledButton(
+              onPressed: _submitting ? null : _submit,
+              child: _submitting
+                  ? const ButtonSpinner()
+                  : const Text('Save & Complete Inspection'),
+            ),
+          ],
+        ),
       ),
     );
   }

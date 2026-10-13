@@ -5,6 +5,15 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Push notifications need android/app/google-services.json from the
+// Firebase console (project "citycalls", Android app registered with the
+// package name com.citycalls.citycalls_vendor below). The plugin is only
+// applied when that file exists, so the app still builds without it — it
+// just can't receive pushes (main.dart / push_notification_service.dart).
+if (file("google-services.json").exists()) {
+    apply plugin: "com.google.gms.google-services"
+}
+
 android {
     namespace = "com.citycalls.citycalls_vendor"
     compileSdk = 36

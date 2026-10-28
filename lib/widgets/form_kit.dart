@@ -106,15 +106,15 @@ class BottomActionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+          16, 16, 16, MediaQuery.of(context).padding.bottom + 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: const Border(top: BorderSide(color: AppColors.hairline)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 12,
-              offset: const Offset(0, -4))
+              color: AppColors.ink.withValues(alpha: 0.08),
+              blurRadius: 24,
+              offset: const Offset(0, -8))
         ],
       ),
       child: child,

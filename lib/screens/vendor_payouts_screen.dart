@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/vendor_models.dart';
 import '../providers/vendor_management_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_bottom_nav.dart';
 import '../widgets/form_kit.dart';
 import '../widgets/state_views.dart';
 import '../widgets/ui_kit.dart';
@@ -37,7 +38,7 @@ class VendorPayoutsScreen extends ConsumerWidget {
             .catchError((_) => <VendorPayout>[]);
       },
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        padding: EdgeInsets.fromLTRB(16, 8, 16, bottomNavClearance(context)),
         children: [
           Row(
             children: [

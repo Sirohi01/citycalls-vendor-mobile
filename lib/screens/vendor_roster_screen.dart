@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/vendor_models.dart';
 import '../providers/vendor_management_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_bottom_nav.dart';
 import '../widgets/state_views.dart';
 import '../widgets/ui_kit.dart';
 
@@ -51,7 +52,7 @@ class VendorRosterScreen extends ConsumerWidget {
           }
           final active = technicians.where((t) => t.active).length;
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            padding: EdgeInsets.fromLTRB(16, 8, 16, bottomNavClearance(context)),
             children: [
               UiSectionLabel(
                   '$active active • ${technicians.length - active} inactive'),

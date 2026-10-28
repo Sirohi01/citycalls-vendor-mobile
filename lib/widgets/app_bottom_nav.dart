@@ -13,9 +13,54 @@ class AppNavItemData {
       this.badge = 0});
 }
 
-// Bottom bar shared by MainShell and VendorOwnerShell — same as the customer
-// app's: white bar, hairline top border, the selected tab gets a short green
-// bar along the top edge, a filled icon and a bold label.
+/// Tabs of the field-work shell (MainShell). Familiar icons with a label
+/// under every one, so each tab reads at a glance.
+List<AppNavItemData> fieldNavItems({int newJobs = 0}) => [
+      const AppNavItemData(
+          icon: Icons.home_outlined,
+          activeIcon: Icons.home_rounded,
+          label: 'Home'),
+      AppNavItemData(
+          icon: Icons.assignment_outlined,
+          activeIcon: Icons.assignment_rounded,
+          label: 'My Jobs',
+          badge: newJobs),
+      const AppNavItemData(
+          icon: Icons.history_rounded,
+          activeIcon: Icons.history_rounded,
+          label: 'History'),
+      const AppNavItemData(
+          icon: Icons.person_outline_rounded,
+          activeIcon: Icons.person_rounded,
+          label: 'Profile'),
+    ];
+
+/// Tabs of the vendor owner/manager shell (VendorOwnerShell).
+List<AppNavItemData> vendorNavItems({required bool showEarnings}) => [
+      const AppNavItemData(
+          icon: Icons.home_outlined,
+          activeIcon: Icons.home_rounded,
+          label: 'Home'),
+      const AppNavItemData(
+          icon: Icons.groups_outlined,
+          activeIcon: Icons.groups_rounded,
+          label: 'My Team'),
+      if (showEarnings)
+        const AppNavItemData(
+            icon: Icons.account_balance_wallet_outlined,
+            activeIcon: Icons.account_balance_wallet_rounded,
+            label: 'Earnings'),
+    ];
+
+/// Space a tab screen must leave at the bottom of its scroll content so the
+/// last item isn't hidden behind the floating bar.
+double bottomNavClearance(BuildContext context) =>
+    MediaQuery.of(context).padding.bottom + 110;
+
+// Floating dark bottom bar shared by MainShell and VendorOwnerShell. Every
+// tab shows its icon with its name underneath; the selected tab gets a lime
+// pill behind the icon and a lime, bold label. Shells use `extendBody: true`
+// so content scrolls underneath it.
 class AppBottomNav extends StatelessWidget {
   final List<AppNavItemData> items;
   final int currentIndex;
@@ -28,31 +73,39 @@ class AppBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: const Border(top: BorderSide(color: AppColors.hairline)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, -4),
+    final bottom = MediaQuery.of(context).padding.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(14, 0, 14, bottom > 0 ? bottom : 12),
+      child: Container(
+        height: 74,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF111A14), AppColors.heroDark],
           ),
-        ],
-      ),
-      child: SafeArea(
-        child: SizedBox(
-          height: 62,
-          child: Row(
-            children: [
-              for (var i = 0; i < items.length; i++)
-                _NavItem(
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.heroDark.withValues(alpha: 0.35),
+              blurRadius: 30,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            for (var i = 0; i < items.length; i++)
+              Expanded(
+                child: _NavItem(
                   data: items[i],
                   selected: i == currentIndex,
                   onTap: () => onTap(i),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
@@ -68,42 +121,52 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.green : AppColors.faint;
-    return Expanded(
+    final idle = Colors.white.withValues(alpha: 0.62);
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: data.badge > 0 ? '${data.label}, ${data.badge} new' : data.label,
+      excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
-        splashColor: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        splashColor: AppColors.lime400.withValues(alpha: 0.12),
         highlightColor: Colors.transparent,
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOut,
-              width: selected ? 28 : 0,
-              height: 3,
-              decoration: const BoxDecoration(
-                color: AppColors.green,
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(3)),
-              ),
-            ),
-            const Spacer(),
             Stack(
               clipBehavior: Clip.none,
+              alignment: Alignment.center,
               children: [
-                Icon(selected ? data.activeIcon : data.icon,
-                    color: color, size: 24),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  width: selected ? 56 : 40,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.lime400 : Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    selected ? data.activeIcon : data.icon,
+                    size: 23,
+                    color: selected ? AppColors.heroDark : idle,
+                  ),
+                ),
                 if (data.badge > 0)
                   Positioned(
-                    right: -8,
-                    top: -4,
+                    right: selected ? 2 : 4,
+                    top: -5,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1),
-                      constraints: const BoxConstraints(minWidth: 16),
+                          horizontal: 4.5, vertical: 1),
+                      constraints: const BoxConstraints(minWidth: 18),
                       decoration: BoxDecoration(
                         color: AppColors.urgent,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.white, width: 1.5),
+                        border:
+                            Border.all(color: AppColors.heroDark, width: 1.8),
                       ),
                       child: Text(
                         data.badge > 9 ? '9+' : '${data.badge}',
@@ -111,23 +174,24 @@ class _NavItem extends StatelessWidget {
                         style: const TextStyle(
                             color: Colors.white,
                             fontSize: 9.5,
-                            fontWeight: FontWeight.w700),
+                            fontWeight: FontWeight.w800),
                       ),
                     ),
                   ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 5),
             Text(
               data.label,
               maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 11.5,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: color,
+                letterSpacing: 0.1,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                color: selected ? AppColors.lime400 : idle,
               ),
             ),
-            const Spacer(),
           ],
         ),
       ),

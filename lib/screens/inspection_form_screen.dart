@@ -172,6 +172,7 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
                       tooltip: 'Add symptom',
                       style: IconButton.styleFrom(
                           backgroundColor: AppColors.green,
+                          foregroundColor: Colors.white,
                           minimumSize: const Size(48, 48)),
                       icon: const Icon(Icons.add_rounded),
                     ),

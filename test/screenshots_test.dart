@@ -12,6 +12,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:drift/native.dart';
+import 'package:citycalls_vendor/data/api_client.dart';
+import 'package:citycalls_vendor/data/job_repository.dart';
+import 'package:citycalls_vendor/models/visit_models.dart';
+import 'package:citycalls_vendor/screens/reschedule_screen.dart';
+import 'package:citycalls_vendor/sync/sync_engine.dart';
+import 'package:citycalls_vendor/sync/sync_repository.dart';
+import 'support/fake_backend.dart';
+import 'package:geolocator/geolocator.dart';
 
 import 'package:citycalls_vendor/models/auth_models.dart';
 import 'package:citycalls_vendor/models/employee_models.dart';
@@ -48,6 +58,8 @@ import 'package:citycalls_vendor/screens/work_progress_screen.dart';
 import 'package:citycalls_vendor/sync/local_database.dart';
 import 'package:citycalls_vendor/theme/app_theme.dart';
 import 'package:citycalls_vendor/widgets/app_bottom_nav.dart';
+import 'package:citycalls_vendor/widgets/live_location_card.dart';
+import 'package:flutter_map/flutter_map.dart';
 
 Future<void> _loadFonts() async {
   final flutterRoot = Platform.environment['FLUTTER_ROOT'] ??
@@ -60,36 +72,17 @@ Future<void> _loadFonts() async {
     ..addFont(read('Roboto-Medium.ttf'))
     ..addFont(read('Roboto-Bold.ttf'));
   await roboto.load();
+  // The app's own typeface, from the bundled assets.
+  Future<ByteData> asset(String name) async =>
+      ByteData.view(File('assets/fonts/$name').readAsBytesSync().buffer);
+  final jakarta = FontLoader('PlusJakartaSans');
+  for (final w in ['Regular', 'Medium', 'SemiBold', 'Bold', 'ExtraBold']) {
+    jakarta.addFont(asset('PlusJakartaSans-$w.ttf'));
+  }
+  await jakarta.load();
   final icons = FontLoader('MaterialIcons')
     ..addFont(read('MaterialIcons-Regular.otf'));
   await icons.load();
-}
-
-// Component styles in AppTheme that set no fontFamily (buttons, app bar
-// titles) use the platform default font — Roboto on a phone, but the block
-// test font here. Pin them to Roboto so the renders match a real device.
-ThemeData _withRoboto(ThemeData t) {
-  TextStyle? f(TextStyle? s) => s?.copyWith(fontFamily: 'Roboto');
-  ButtonStyle? b(ButtonStyle? style) => style?.copyWith(
-      textStyle: WidgetStateProperty.resolveWith(
-          (states) => f(style.textStyle?.resolve(states))));
-  return t.copyWith(
-    appBarTheme:
-        t.appBarTheme.copyWith(titleTextStyle: f(t.appBarTheme.titleTextStyle)),
-    filledButtonTheme:
-        FilledButtonThemeData(style: b(t.filledButtonTheme.style)),
-    outlinedButtonTheme:
-        OutlinedButtonThemeData(style: b(t.outlinedButtonTheme.style)),
-    elevatedButtonTheme:
-        ElevatedButtonThemeData(style: b(t.elevatedButtonTheme.style)),
-    textButtonTheme: TextButtonThemeData(style: b(t.textButtonTheme.style)),
-    chipTheme: t.chipTheme.copyWith(labelStyle: f(t.chipTheme.labelStyle)),
-    dialogTheme:
-        t.dialogTheme.copyWith(titleTextStyle: f(t.dialogTheme.titleTextStyle)),
-    listTileTheme: t.listTileTheme.copyWith(
-        titleTextStyle: f(t.listTileTheme.titleTextStyle),
-        subtitleTextStyle: f(t.listTileTheme.subtitleTextStyle)),
-  );
 }
 
 final _now = DateTime.now();
@@ -213,6 +206,7 @@ List<Override> _overrides({String role = 'TECHNICIAN', bool otpSent = false}) =>
                       vendorId: 'v1')))),
       myEmployeeProfileProvider.overrideWith((ref) => _profile),
       allJobsProvider.overrideWith((ref) => _jobs),
+      jobVisitsProvider.overrideWith((ref, id) => const <ServiceVisit>[]),
       unreadNotificationCountProvider.overrideWith((ref) => 3),
       pendingActionsProvider.overrideWith((ref) => Stream.value(_queue)),
       locationPermissionProvider
@@ -298,6 +292,7 @@ List<Override> _overrides({String role = 'TECHNICIAN', bool otpSent = false}) =>
 
 void main() {
   setUpAll(_loadFonts);
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
 
   // One screen → one PNG. [extra] adds per-shot overrides (e.g. the job
   // status); [setup] can interact before the capture.
@@ -310,6 +305,9 @@ void main() {
     Future<void> Function(WidgetTester tester)? setup,
   }) {
     testWidgets(name, (tester) async {
+      // flutter_test draws shadows as hard bands by default; render them
+      // the way a device does.
+      debugDisableShadows = false;
       tester.view.physicalSize = const Size(390 * 2, 844 * 2);
       tester.view.devicePixelRatio = 2;
       addTearDown(tester.view.reset);
@@ -318,7 +316,7 @@ void main() {
         overrides: [..._overrides(role: role, otpSent: otpSent), ...extra],
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
-          theme: _withRoboto(AppTheme.light()),
+          theme: AppTheme.light(),
           home: screen,
         ),
       ));
@@ -338,48 +336,21 @@ void main() {
       // Unmount so periodic timers (OTP countdown etc.) are cancelled.
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 1));
+      // Must be restored inside the test body — the framework checks it
+      // before tear-down runs.
+      debugDisableShadows = true;
     });
   }
 
   Widget withNav(Widget body, int index, {bool vendor = false}) => Scaffold(
+        extendBody: true,
         body: body,
         bottomNavigationBar: AppBottomNav(
           currentIndex: index,
           onTap: (_) {},
           items: vendor
-              ? const [
-                  AppNavItemData(
-                      icon: Icons.space_dashboard_outlined,
-                      activeIcon: Icons.space_dashboard_rounded,
-                      label: 'Home'),
-                  AppNavItemData(
-                      icon: Icons.groups_outlined,
-                      activeIcon: Icons.groups_rounded,
-                      label: 'Roster'),
-                  AppNavItemData(
-                      icon: Icons.payments_outlined,
-                      activeIcon: Icons.payments_rounded,
-                      label: 'Payouts'),
-                ]
-              : const [
-                  AppNavItemData(
-                      icon: Icons.space_dashboard_outlined,
-                      activeIcon: Icons.space_dashboard_rounded,
-                      label: 'Home'),
-                  AppNavItemData(
-                      icon: Icons.work_outline_rounded,
-                      activeIcon: Icons.work_rounded,
-                      label: 'My Jobs',
-                      badge: 1),
-                  AppNavItemData(
-                      icon: Icons.history_rounded,
-                      activeIcon: Icons.history_rounded,
-                      label: 'History'),
-                  AppNavItemData(
-                      icon: Icons.person_outline_rounded,
-                      activeIcon: Icons.person_rounded,
-                      label: 'Profile'),
-                ],
+              ? vendorNavItems(showEarnings: true)
+              : fieldNavItems(newJobs: 1),
         ),
       );
 
@@ -461,4 +432,140 @@ void main() {
           2,
           vendor: true),
       role: 'VENDOR_OWNER');
+  // Map frame with a GPS fix. Tiles can't download in a test, so the map
+  // area renders blank — this shot is for the frame, chips and marker.
+  shot(
+      '25_map_live',
+      const Scaffold(
+          body: Padding(
+              padding: EdgeInsets.fromLTRB(16, 80, 16, 0),
+              child: LiveLocationCard())),
+      extra: [
+        locationPermissionProvider
+            .overrideWith((ref) => LocationPermissionState.granted),
+        currentPositionStreamProvider.overrideWith((ref) => Stream.value(
+            Position(
+                latitude: 28.4595,
+                longitude: 77.0266,
+                timestamp: DateTime(2026),
+                accuracy: 12,
+                altitude: 0,
+                altitudeAccuracy: 0,
+                heading: 0,
+                headingAccuracy: 0,
+                speed: 0,
+                speedAccuracy: 0))),
+      ]);
+
+  // Reschedule, against a fake backend returning the branch's slots.
+  shot('26_reschedule', RescheduleScreen(job: _detail('APPOINTMENT_SCHEDULED')),
+      extra: [
+        jobRepositoryProvider.overrideWith((ref) {
+          final client = ApiClient(baseUrl: 'https://api.test/api/v1');
+          client.dio.httpClientAdapter = FakeBackend((r) => FakeResponse.ok({
+                'dayClosed': false,
+                'slots': [
+                  {'key': 'a', 'label': '9:00 AM - 11:00 AM', 'remaining': 0, 'available': false},
+                  {'key': 'b', 'label': '11:00 AM - 1:00 PM', 'remaining': 2, 'available': true},
+                  {'key': 'c', 'label': '2:00 PM - 4:00 PM', 'remaining': 5, 'available': true},
+                  {'key': 'd', 'label': '4:00 PM - 6:00 PM', 'remaining': 1, 'available': true},
+                ]
+              }));
+          final db = LocalDatabase.forTesting(NativeDatabase.memory());
+          ref.onDispose(db.close);
+          final sync = SyncRepository(db);
+          return JobRepository(client, sync, SyncEngine(sync, client));
+        }),
+      ],
+      setup: (tester) async {
+        await tester.tap(find.text('2:00 PM - 4:00 PM'));
+        await tester.pump(const Duration(milliseconds: 300));
+      });
+  shot('27_job_owner_view', const JobDetailScreen(jobId: 'job41'),
+      role: 'VENDOR_OWNER', extra: detail('WORK_IN_PROGRESS'));
+  shot('28_job_work_record', const JobDetailScreen(jobId: 'job41'),
+      extra: [
+        ...detail('PAYMENT_PENDING'),
+        jobVisitsProvider.overrideWith((ref, id) => [
+              ServiceVisit(
+                id: 'v1',
+                visitNumber: 1,
+                defectFound: 'Gas leakage at outdoor unit',
+                symptoms: const ['Not cooling', 'Water leaking'],
+                solutionType: 'Gas refill',
+                parts: [VisitPart(name: 'R32 Gas', qty: 1, unitPrice: 1800)],
+                labourCharge: 600,
+                workNotes: 'Fixed leak, refilled gas, tested cooling 18°C.',
+                completedAt: DateTime(2026, 10, 22, 11, 40),
+              ),
+            ]),
+      ],
+      setup: (tester) async {
+        await tester.drag(find.byType(ListView).first, const Offset(0, -900));
+        await tester.pump(const Duration(milliseconds: 400));
+      });
+  shot('29_job_customer_na', const JobDetailScreen(jobId: 'job41'),
+      extra: detail('CUSTOMER_UNAVAILABLE'));
+
+  // Real OSM tiles for the area, downloaded once into a local folder
+  // (OSM_TILES env var), so the map renders as on a phone. Skipped when absent.
+  final tilesDir = Platform.environment['OSM_TILES'];
+  if (tilesDir != null) {
+    final fix = Position(
+        latitude: 28.4595,
+        longitude: 77.0266,
+        timestamp: DateTime(2026),
+        accuracy: 18,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: 0,
+        headingAccuracy: 0,
+        speed: 0,
+        speedAccuracy: 0);
+    final gps = [
+      locationPermissionProvider
+          .overrideWith((ref) => LocationPermissionState.granted),
+      currentPositionStreamProvider.overrideWith((ref) => Stream.value(fix)),
+    ];
+    Future<void> loadTiles(WidgetTester tester) async {
+      await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.runAsync(() => Future.delayed(const Duration(seconds: 1)));
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+
+    setUp(() => debugMapTileProvider = _LocalTiles(tilesDir));
+    tearDown(() => debugMapTileProvider = null);
+    shot(
+        '30_map_card_real',
+        const Scaffold(
+            body: Padding(
+                padding: EdgeInsets.fromLTRB(16, 80, 16, 0),
+                child: LiveLocationCard())),
+        extra: gps,
+        setup: loadTiles);
+    shot('31_map_full_real', const FullMapScreen(),
+        extra: gps, setup: loadTiles);
+  }
 }
+
+class _LocalTiles extends TileProvider {
+  final String dir;
+  _LocalTiles(this.dir);
+
+  @override
+  ImageProvider getImage(TileCoordinates c, TileLayer options) {
+    final f = File('$dir/${c.z}/${c.x}/${c.y}.png');
+    return f.existsSync()
+        ? MemoryImage(f.readAsBytesSync())
+        : MemoryImage(_blank);
+  }
+}
+
+// 1x1 transparent PNG.
+final _blank = Uint8List.fromList(const [
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1,
+  0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84,
+  120, 156, 99, 0, 1, 0, 0, 5, 0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73, 69,
+  78, 68, 174, 66, 96, 130
+]);

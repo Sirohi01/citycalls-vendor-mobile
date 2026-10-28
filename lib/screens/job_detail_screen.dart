@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/job_models.dart';
+import '../models/visit_models.dart';
+import '../providers/auth_providers.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/hero_header.dart';
 import '../widgets/state_views.dart';
 import '../widgets/ui_kit.dart';
 import 'inspection_form_screen.dart';
@@ -12,6 +16,7 @@ import 'parts_entry_screen.dart';
 import 'estimate_form_screen.dart';
 import 'invoice_screen.dart';
 import 'completion_screen.dart';
+import 'reschedule_screen.dart';
 
 // Live-location pings while TECHNICIAN_EN_ROUTE are sent app-wide by
 // providers/transit_tracking_provider.dart (started from MainShell), not
@@ -30,6 +35,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
 
   void _refresh() {
     ref.invalidate(jobDetailProvider(widget.jobId));
+    ref.invalidate(jobVisitsProvider(widget.jobId));
     ref.invalidate(allJobsProvider);
   }
 
@@ -126,37 +132,93 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     }
   }
 
+  // ON_HOLD is only reachable from WORK_IN_PROGRESS — hop through it first.
+  Future<void> _putOnHold(JobDetail job) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Put job on hold'),
+        content: TextField(
+            controller: controller,
+            maxLines: 3,
+            decoration: const InputDecoration(
+                hintText: 'Why is the work paused? (e.g. customer away)')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(110, 44)),
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Put on hold'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null) return;
+    await _run([
+      if (job.status == 'WORK_STARTED') 'WORK_IN_PROGRESS',
+      'ON_HOLD',
+    ], reason: reason.isEmpty ? 'Paused by technician' : reason);
+  }
+
   @override
   Widget build(BuildContext context) {
     final job = ref.watch(jobDetailProvider(widget.jobId));
+    // Vendor owners/managers can only accept or reject on their company's
+    // behalf — every later step is a field-technician transition on the API
+    // (FIELD_ROLES in scripts/seed.ts), and they hold no finance permission.
+    final managerView =
+        ref.watch(authProvider).user?.isVendorManagement ?? false;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Job Details')),
+      // The loaded screen draws its own dark hero with a back button; the
+      // plain app bar is only for the loading / error states.
+      appBar: job.hasValue ? null : AppBar(title: const Text('Job Details')),
       body: job.when(
+        skipLoadingOnRefresh: true,
+        skipLoadingOnReload: true,
         data: (j) => Column(
           children: [
             Expanded(
-              child: RefreshIndicator(
-                color: AppColors.green,
-                onRefresh: () async {
-                  _refresh();
-                  await ref
-                      .read(jobDetailProvider(widget.jobId).future)
-                      .catchError((_) => j);
-                },
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                  children: [
-                    if (_error != null) _ErrorBox(text: _error!),
-                    _StatusHint(status: j.status),
-                    _JobDetailBody(job: j),
-                  ],
+              child: AnnotatedRegion<SystemUiOverlayStyle>(
+                value: SystemUiOverlayStyle.light,
+                child: RefreshIndicator(
+                  color: AppColors.green,
+                  edgeOffset: MediaQuery.of(context).padding.top,
+                  onRefresh: () async {
+                    _refresh();
+                    await ref
+                        .read(jobDetailProvider(widget.jobId).future)
+                        .catchError((_) => j);
+                  },
+                  child: ListView(
+                    padding: const EdgeInsets.only(bottom: 28),
+                    children: [
+                      _JobHero(job: j),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_error != null) _ErrorBox(text: _error!),
+                            _StatusHint(
+                                status: j.status, managerView: managerView),
+                            _JobDetailBody(job: j),
+                            _VisitLog(jobId: j.id),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
             _ActionBar(
               job: j,
+              managerView: managerView,
               submitting: _submitting,
+              onPutOnHold: () => _putOnHold(j),
               onChangeStatus: _changeStatus,
               onStartTravel: () => _startTravel(j),
               onMarkPartsPending: () => _markPartsPending(j),
@@ -173,6 +235,299 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
               onRetry: () => ref.invalidate(jobDetailProvider(widget.jobId))),
         ),
       ),
+    );
+  }
+}
+
+// Dark brand header for a job: back button, service, number, status and a
+// progress stepper showing how far along the job is.
+class _JobHero extends StatelessWidget {
+  final JobDetail job;
+  const _JobHero({required this.job});
+
+  static const _steps = ['Accept', 'Travel', 'Inspect', 'Work', 'Payment', 'Done'];
+
+  // Which of [_steps] a status is on; null hides the stepper
+  // (cancelled / handed back jobs).
+  static int? _completedSteps(String s) {
+    if (newJobStatuses.contains(s)) return 0;
+    const accepted = {'ACCEPTED', 'APPOINTMENT_SCHEDULED', 'RESCHEDULED'};
+    const travel = {
+      'TECHNICIAN_EN_ROUTE',
+      'TECHNICIAN_ARRIVED',
+      'CUSTOMER_UNAVAILABLE'
+    };
+    const inspect = {
+      'INSPECTION_STARTED',
+      'INSPECTION_COMPLETED',
+      'ESTIMATE_PENDING',
+      'ESTIMATE_SHARED',
+      'AWAITING_CUSTOMER_APPROVAL',
+      'ESTIMATE_REJECTED',
+    };
+    const work = {
+      'ESTIMATE_APPROVED',
+      'WORK_STARTED',
+      'WORK_IN_PROGRESS',
+      'PARTS_PENDING',
+      'ON_HOLD'
+    };
+    const payment = {
+      'SERVICE_COMPLETED',
+      'CUSTOMER_CONFIRMATION_PENDING',
+      'PAYMENT_PENDING',
+      'PARTIALLY_PAID'
+    };
+    // The value is the index of the step in progress: everything before it
+    // is ticked. Accepted and en-route both sit on "Travel".
+    if (accepted.contains(s) || travel.contains(s)) return 1;
+    if (inspect.contains(s)) return 2;
+    if (work.contains(s)) return 3;
+    if (payment.contains(s)) return 4;
+    if (s == 'PAID' || s == 'CLOSED') return 6;
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = statusAccentColor(job.status);
+    final urgent = job.priority == 'URGENT' || job.priority == 'HIGH';
+    final done = _completedSteps(job.status);
+    final when = [
+      if (job.scheduledDate != null) formatRelativeDay(job.scheduledDate),
+      if (job.scheduledSlot != null && job.scheduledSlot!.isNotEmpty)
+        job.scheduledSlot!,
+    ].join(' • ');
+
+    return HeroHeader(
+      padding: const EdgeInsets.fromLTRB(12, 6, 16, 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              HeroIconButton(
+                icon: Icons.arrow_back_rounded,
+                tooltip: 'Back',
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+              const Spacer(),
+              Text('#${job.number}',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(width: 4),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 18, 6, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _HeroPill(
+                        text: jobStatusLabel(job.status),
+                        color: accent == AppColors.info
+                            ? AppColors.lime400
+                            : accent),
+                    if (urgent)
+                      _HeroPill(
+                          text: '${job.priority} PRIORITY',
+                          color: const Color(0xFFFB7185),
+                          icon: Icons.bolt_rounded),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(job.serviceName ?? 'Service Request',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 25,
+                        height: 1.2,
+                        letterSpacing: -0.6,
+                        fontWeight: FontWeight.w800)),
+                if (when.isNotEmpty || job.slaDueAt != null) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 6,
+                    children: [
+                      if (when.isNotEmpty)
+                        _HeroMeta(icon: Icons.event_rounded, text: when),
+                      if (job.slaDueAt != null)
+                        _HeroMeta(
+                            icon: Icons.timer_outlined,
+                            text: 'Due ${formatTime(job.slaDueAt)}'),
+                    ],
+                  ),
+                ],
+                if (done != null) ...[
+                  const SizedBox(height: 22),
+                  _Stepper(steps: _steps, done: done),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroPill extends StatelessWidget {
+  final String text;
+  final Color color;
+  final IconData? icon;
+  const _HeroPill({required this.text, required this.color, this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null)
+            Icon(icon, size: 13, color: color)
+          else
+            Container(
+                width: 6,
+                height: 6,
+                decoration:
+                    BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(text,
+              style: TextStyle(
+                  color: color,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.2)),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroMeta extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _HeroMeta({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: Colors.white.withValues(alpha: 0.55)),
+        const SizedBox(width: 6),
+        Text(text,
+            style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.8),
+                fontSize: 13,
+                fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+}
+
+// Horizontal job-progress stepper on the dark hero: completed steps are lime
+// with a check, the current one glows, the rest are faint.
+class _Stepper extends StatelessWidget {
+  final List<String> steps;
+  final int done;
+  const _Stepper({required this.steps, required this.done});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            for (var i = 0; i < steps.length; i++) ...[
+              _dot(i),
+              if (i < steps.length - 1)
+                Expanded(
+                  child: Container(
+                    height: 3,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: BoxDecoration(
+                      color: i < done
+                          ? AppColors.lime400
+                          : Colors.white.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (var i = 0; i < steps.length; i++)
+              Expanded(
+                child: Text(
+                  steps[i],
+                  textAlign: i == 0
+                      ? TextAlign.left
+                      : i == steps.length - 1
+                          ? TextAlign.right
+                          : TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                  softWrap: false,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: i == done ? FontWeight.w800 : FontWeight.w600,
+                    color: i < done
+                        ? AppColors.lime400
+                        : i == done
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.4),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _dot(int i) {
+    final complete = i < done;
+    final current = i == done;
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: complete
+            ? AppColors.lime400
+            : current
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.10),
+        border: current
+            ? Border.all(color: AppColors.lime400, width: 3)
+            : null,
+        boxShadow: current
+            ? [
+                BoxShadow(
+                    color: AppColors.lime400.withValues(alpha: 0.5),
+                    blurRadius: 12)
+              ]
+            : null,
+      ),
+      child: complete
+          ? const Icon(Icons.check_rounded, size: 14, color: AppColors.heroDark)
+          : null,
     );
   }
 }
@@ -212,7 +567,8 @@ class _ErrorBox extends StatelessWidget {
 // like the app is stuck.
 class _StatusHint extends StatelessWidget {
   final String status;
-  const _StatusHint({required this.status});
+  final bool managerView;
+  const _StatusHint({required this.status, this.managerView = false});
 
   static const _hints = {
     'ESTIMATE_PENDING':
@@ -224,7 +580,8 @@ class _StatusHint extends StatelessWidget {
     'ESTIMATE_REJECTED':
         'The customer rejected the estimate. The office will close or follow up on this job.',
     'CUSTOMER_UNAVAILABLE':
-        'Marked as customer unavailable. The office will reschedule this visit.',
+        'Marked as customer unavailable. Agree a new time with the customer and reschedule below, or the office will follow up.',
+    'ON_HOLD': 'Work is paused. Resume when you are ready to continue.',
     'REASSIGNMENT_REQUIRED':
         'You rejected this job. The office will assign it to someone else.',
     'PAID': 'Payment received. This job is complete.',
@@ -234,7 +591,12 @@ class _StatusHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hint = _hints[status];
+    const terminal = {'PAID', 'CLOSED', 'CANCELLED', 'REASSIGNMENT_REQUIRED'};
+    final hint = managerView &&
+            !newJobStatuses.contains(status) &&
+            !terminal.contains(status)
+        ? 'Your field technician updates this job from their own login. You can follow every step here.'
+        : _hints[status];
     if (hint == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -260,7 +622,9 @@ class _StatusHint extends StatelessWidget {
 
 class _ActionBar extends StatelessWidget {
   final JobDetail job;
+  final bool managerView;
   final bool submitting;
+  final VoidCallback onPutOnHold;
   final Future<void> Function(String toStatus, {String? reason}) onChangeStatus;
   final VoidCallback onStartTravel;
   final VoidCallback onMarkPartsPending;
@@ -273,7 +637,9 @@ class _ActionBar extends StatelessWidget {
 
   const _ActionBar({
     required this.job,
+    required this.managerView,
     required this.submitting,
+    required this.onPutOnHold,
     required this.onChangeStatus,
     required this.onStartTravel,
     required this.onMarkPartsPending,
@@ -298,23 +664,29 @@ class _ActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content = _buildForStatus(context);
-    final showSupplementaryEstimate =
+    final content = managerView
+        ? (newJobStatuses.contains(job.status)
+            ? _buildForStatus(context)
+            : null)
+        : _buildForStatus(context);
+    final showSupplementaryEstimate = !managerView &&
         _supplementaryEstimateStatuses.contains(job.status);
+    final showHold = !managerView &&
+        (job.status == 'WORK_STARTED' || job.status == 'WORK_IN_PROGRESS');
     if (content == null && !showSupplementaryEstimate) {
       return const SizedBox.shrink();
     }
     return Container(
       padding: EdgeInsets.fromLTRB(
-          16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+          16, 16, 16, MediaQuery.of(context).padding.bottom + 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: const Border(top: BorderSide(color: AppColors.hairline)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 12,
-              offset: const Offset(0, -4))
+              color: AppColors.ink.withValues(alpha: 0.08),
+              blurRadius: 24,
+              offset: const Offset(0, -8))
         ],
       ),
       child: submitting
@@ -329,11 +701,33 @@ class _ActionBar extends StatelessWidget {
                 if (showSupplementaryEstimate)
                   Padding(
                     padding: EdgeInsets.only(top: content != null ? 6 : 0),
-                    child: TextButton.icon(
-                      onPressed: () =>
-                          _open(context, EstimateFormScreen(job: job)),
-                      icon: const Icon(Icons.add_circle_outline, size: 18),
-                      label: const Text('Add Additional Estimate'),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (showHold) ...[
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                                foregroundColor: AppColors.gold400),
+                            onPressed: onPutOnHold,
+                            icon: const Icon(Icons.pause_circle_outline,
+                                size: 18),
+                            label: const Text('Put on hold'),
+                          ),
+                          Container(
+                              width: 1,
+                              height: 18,
+                              margin:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              color: AppColors.line),
+                        ],
+                        TextButton.icon(
+                          onPressed: () =>
+                              _open(context, EstimateFormScreen(job: job)),
+                          icon: const Icon(Icons.add_circle_outline, size: 18),
+                          label: Text(
+                              showHold ? 'Add estimate' : 'Add Additional Estimate'),
+                        ),
+                      ],
                     ),
                   ),
               ],
@@ -369,13 +763,41 @@ class _ActionBar extends StatelessWidget {
     }
 
     switch (job.status) {
-      case 'ACCEPTED':
-      case 'APPOINTMENT_SCHEDULED':
       case 'RESCHEDULED':
         return FilledButton.icon(
           onPressed: onStartTravel,
           icon: const Icon(Icons.directions_car_outlined, size: 18),
           label: const Text('Start Travel'),
+        );
+
+      case 'ACCEPTED':
+      case 'APPOINTMENT_SCHEDULED':
+        return Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _open(context, RescheduleScreen(job: job)),
+                icon: const Icon(Icons.event_repeat_rounded, size: 18),
+                label: const Text('Reschedule'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: FilledButton.icon(
+                onPressed: onStartTravel,
+                icon: const Icon(Icons.directions_car_outlined, size: 18),
+                label: const Text('Start Travel'),
+              ),
+            ),
+          ],
+        );
+
+      case 'CUSTOMER_UNAVAILABLE':
+        return FilledButton.icon(
+          onPressed: () => _open(context, RescheduleScreen(job: job)),
+          icon: const Icon(Icons.event_repeat_rounded, size: 18),
+          label: const Text('Reschedule Visit'),
         );
 
       case 'TECHNICIAN_EN_ROUTE':
@@ -557,74 +979,9 @@ class _JobDetailBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = statusAccentColor(job.status);
-    final when = [
-      if (job.scheduledDate != null) formatDisplayDate(job.scheduledDate),
-      if (job.scheduledSlot != null && job.scheduledSlot!.isNotEmpty)
-        job.scheduledSlot!,
-    ].join(' • ');
-    final urgent = job.priority == 'URGENT' || job.priority == 'HIGH';
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        UiCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  UiIconTile(
-                      icon: Icons.build_outlined, color: accent, size: 44),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(job.serviceName ?? 'Service Request',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 17,
-                                color: AppColors.ink)),
-                        const SizedBox(height: 2),
-                        Text('#${job.number}',
-                            style: const TextStyle(
-                                color: AppColors.muted, fontSize: 12.5)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  UiPill(text: jobStatusLabel(job.status), color: accent),
-                  if (urgent)
-                    UiPill(
-                        text: '${job.priority} PRIORITY',
-                        color: AppColors.urgent,
-                        icon: Icons.priority_high_rounded),
-                ],
-              ),
-              if (when.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                UiInfoRow(
-                    icon: Icons.schedule_rounded,
-                    label: 'Appointment',
-                    value: when),
-              ],
-              if (job.slaDueAt != null)
-                UiInfoRow(
-                    icon: Icons.timer_outlined,
-                    label: 'Due by',
-                    value: formatDisplayDateTime(job.slaDueAt)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
         const UiSectionLabel('Customer'),
         UiCard(
           child: Column(
@@ -791,6 +1148,169 @@ class _JobDetailBody extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+// Everything recorded on this job so far (GET /service-requests/:id/visits):
+// inspection findings, parts, labour, notes and before/after photos.
+class _VisitLog extends ConsumerWidget {
+  final String jobId;
+  const _VisitLog({required this.jobId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final visits = ref.watch(jobVisitsProvider(jobId)).valueOrNull;
+    final withContent =
+        (visits ?? const <ServiceVisit>[]).where((v) => v.hasContent).toList();
+    if (withContent.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const UiSectionLabel('Work record'),
+          for (final v in withContent) ...[
+            _VisitCard(visit: v, showNumber: withContent.length > 1),
+            const SizedBox(height: 12),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _VisitCard extends StatelessWidget {
+  final ServiceVisit visit;
+  final bool showNumber;
+  const _VisitCard({required this.visit, required this.showNumber});
+
+  @override
+  Widget build(BuildContext context) {
+    final partsTotal = visit.parts.fold<double>(0, (s, p) => s + p.total);
+    Widget row(IconData icon, String label, String value) =>
+        UiInfoRow(icon: icon, label: label, value: value);
+
+    return UiCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (showNumber || visit.completedAt != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  if (showNumber)
+                    Text('Visit ${visit.visitNumber}',
+                        style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.ink)),
+                  const Spacer(),
+                  if (visit.completedAt != null)
+                    UiPill(
+                        text: 'Completed ${formatTime(visit.completedAt)}',
+                        color: AppColors.success,
+                        icon: Icons.check_circle_rounded),
+                ],
+              ),
+            ),
+          if (visit.defectFound?.isNotEmpty ?? false)
+            row(Icons.report_problem_outlined, 'Defect found',
+                visit.defectFound!),
+          if (visit.symptoms.isNotEmpty)
+            row(Icons.sick_outlined, 'Symptoms', visit.symptoms.join(', ')),
+          if (visit.solutionType?.isNotEmpty ?? false)
+            row(Icons.lightbulb_outline_rounded, 'Solution',
+                visit.solutionType!),
+          if (visit.parts.isNotEmpty)
+            row(
+                Icons.inventory_2_outlined,
+                'Parts (₹${partsTotal.round()})',
+                visit.parts
+                    .map((p) =>
+                        '${p.name} × ${p.qty % 1 == 0 ? p.qty.toInt() : p.qty}')
+                    .join(', ')),
+          if (visit.labourCharge != null)
+            row(Icons.engineering_outlined, 'Labour',
+                '₹${visit.labourCharge!.round()}'),
+          if (visit.workNotes?.isNotEmpty ?? false)
+            row(Icons.notes_rounded, 'Work notes', visit.workNotes!),
+          if (visit.beforeImages.isNotEmpty || visit.afterImages.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 78,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final url in visit.beforeImages)
+                    _Thumb(url: url, tag: 'Before'),
+                  for (final url in visit.afterImages)
+                    _Thumb(url: url, tag: 'After'),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Thumb extends StatelessWidget {
+  final String url;
+  final String tag;
+  const _Thumb({required this.url, required this.tag});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: () => showDialog(
+          context: context,
+          builder: (_) => Dialog(
+            clipBehavior: Clip.antiAlias,
+            child: InteractiveViewer(
+                child: Image.network(url, fit: BoxFit.contain)),
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            children: [
+              Image.network(url,
+                  width: 78,
+                  height: 78,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                      width: 78,
+                      height: 78,
+                      color: AppColors.slate100,
+                      child: const Icon(Icons.broken_image_outlined,
+                          color: AppColors.slate400))),
+              Positioned(
+                left: 4,
+                bottom: 4,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(tag,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

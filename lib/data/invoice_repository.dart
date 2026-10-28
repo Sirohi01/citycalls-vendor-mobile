@@ -10,16 +10,21 @@ class InvoiceRepository {
   final ApiClient _client;
   InvoiceRepository(this._client);
 
+  // The job's live invoice — newest first, skipping CANCELLED ones (a
+  // cancelled invoice can't take payments; the office may have re-billed).
   Future<Invoice?> getInvoiceForRequest(String serviceRequestId) async {
-    final res = await _client.dio.get('/invoices', queryParameters: {'serviceRequestId': serviceRequestId, 'limit': 1});
-    final items = res.data['data'] as List;
-    return items.isEmpty ? null : Invoice.fromJson(items.first as Map<String, dynamic>);
+    final res = await _client.dio.get('/invoices', queryParameters: {'serviceRequestId': serviceRequestId, 'limit': 10});
+    final items = (res.data['data'] as List).map((i) => Invoice.fromJson(i as Map<String, dynamic>));
+    return items.where((i) => i.status != 'CANCELLED').firstOrNull;
   }
 
+  // The bill still in play — CANCELLED ones are dead and CONVERTED ones have
+  // already become the invoice above, so neither should hold the screen on
+  // "waiting for the customer".
   Future<ProformaInvoice?> getProformaForRequest(String serviceRequestId) async {
-    final res = await _client.dio.get('/proforma-invoices', queryParameters: {'serviceRequestId': serviceRequestId, 'limit': 1});
-    final items = res.data['data'] as List;
-    return items.isEmpty ? null : ProformaInvoice.fromJson(items.first as Map<String, dynamic>);
+    final res = await _client.dio.get('/proforma-invoices', queryParameters: {'serviceRequestId': serviceRequestId, 'limit': 10});
+    final items = (res.data['data'] as List).map((p) => ProformaInvoice.fromJson(p as Map<String, dynamic>));
+    return items.where((p) => p.status != 'CANCELLED' && p.status != 'CONVERTED').firstOrNull;
   }
 
   // Carries the approved Estimate's exact items straight through to a

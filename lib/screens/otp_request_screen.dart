@@ -80,18 +80,32 @@ class _OtpRequestScreenState extends ConsumerState<OtpRequestScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Welcome, Partner!',
+            const Text('Welcome, Partner',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                     color: Colors.white,
                     fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5)),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.6)),
             const SizedBox(height: 8),
-            const Text('Login to see your jobs and start working',
+            const Text('Log in to see your jobs and start working',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.slate400, fontSize: 14)),
-            const SizedBox(height: 32),
+                style: TextStyle(
+                    color: AppColors.slate400,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500)),
+            const SizedBox(height: 18),
+            const Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _Perk(icon: Icons.bolt_rounded, text: 'Instant job alerts'),
+                _Perk(icon: Icons.cloud_off_rounded, text: 'Works offline'),
+                _Perk(icon: Icons.lock_rounded, text: 'Secure OTP'),
+              ],
+            ),
+            const SizedBox(height: 26),
             if (_showSavedNumber) ...[
               _SavedNumberCard(text: _pretty(_savedMobile!)),
               Align(
@@ -293,6 +307,36 @@ class _ErrorBanner extends StatelessWidget {
                       color: AppColors.red400,
                       fontSize: 13,
                       fontWeight: FontWeight.w500))),
+        ],
+      ),
+    );
+  }
+}
+
+class _Perk extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _Perk({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: AppColors.lime400),
+          const SizedBox(width: 5),
+          Text(text,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600)),
         ],
       ),
     );

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_bottom_nav.dart';
+import '../widgets/ui_kit.dart';
 import 'vendor_dashboard_screen.dart';
 import 'vendor_roster_screen.dart';
 import 'vendor_payouts_screen.dart';
@@ -52,17 +53,22 @@ class _VendorOwnerShellState extends ConsumerState<VendorOwnerShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Invoices/payouts need vendors:viewFinancial, which only VENDOR_OWNER
+    // holds (scripts/seed.ts) — a manager would only ever see an error there.
+    final canSeeEarnings =
+        ref.watch(authProvider).user?.role == 'VENDOR_OWNER';
     final tabs = [
       VendorDashboardScreen(onLogout: _logout),
-      const _TitledTab(title: 'Technicians', child: VendorRosterScreen()),
-      const _TitledTab(
-          title: 'Invoices & Payouts', child: VendorPayoutsScreen()),
+      const _TitledTab(title: 'My Team', child: VendorRosterScreen()),
+      if (canSeeEarnings)
+        const _TitledTab(title: 'Earnings', child: VendorPayoutsScreen()),
     ];
+    if (_index >= tabs.length) _index = 0;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        systemNavigationBarColor: Colors.white,
+        systemNavigationBarColor: AppColors.page,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: PopScope(
@@ -71,24 +77,13 @@ class _VendorOwnerShellState extends ConsumerState<VendorOwnerShell> {
           if (!didPop) setState(() => _index = 0);
         },
         child: Scaffold(
+          // Content scrolls underneath the floating bottom bar.
+          extendBody: true,
           body: IndexedStack(index: _index, children: tabs),
           bottomNavigationBar: AppBottomNav(
             currentIndex: _index,
             onTap: (i) => setState(() => _index = i),
-            items: const [
-              AppNavItemData(
-                  icon: Icons.space_dashboard_outlined,
-                  activeIcon: Icons.space_dashboard_rounded,
-                  label: 'Home'),
-              AppNavItemData(
-                  icon: Icons.groups_outlined,
-                  activeIcon: Icons.groups_rounded,
-                  label: 'Roster'),
-              AppNavItemData(
-                  icon: Icons.payments_outlined,
-                  activeIcon: Icons.payments_rounded,
-                  label: 'Payouts'),
-            ],
+            items: vendorNavItems(showEarnings: canSeeEarnings),
           ),
         ),
       ),
@@ -104,8 +99,12 @@ class _TitledTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title), titleSpacing: 16),
-      body: child,
+      body: Column(
+        children: [
+          UiPageHeader(title: title),
+          Expanded(child: child),
+        ],
+      ),
     );
   }
 }

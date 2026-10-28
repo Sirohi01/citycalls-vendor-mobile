@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'api_client.dart';
 import '../models/job_models.dart';
+import '../models/visit_models.dart';
 import '../sync/sync_repository.dart';
 import '../sync/sync_engine.dart';
 
@@ -37,6 +38,50 @@ class JobRepository {
   Future<JobDetail> getJob(String id) async {
     final res = await _client.dio.get('/service-requests/$id');
     return JobDetail.fromJson(res.data['data'] as Map<String, dynamic>);
+  }
+
+  // What has been recorded on this job so far (inspection, parts, work,
+  // photos) — one entry per visit, oldest first.
+  Future<List<ServiceVisit>> getVisits(String id) async {
+    final res = await _client.dio.get('/service-requests/$id/visits');
+    final list = (res.data['data'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(ServiceVisit.fromJson)
+        .toList()
+      ..sort((a, b) => a.visitNumber.compareTo(b.visitNumber));
+    return list;
+  }
+
+  // Free slots for a branch on a date — the same list the customer app books
+  // from. Date-only on the wire so the day doesn't shift across UTC.
+  Future<AppointmentSlots> getAppointmentSlots(
+      String branchId, DateTime date) async {
+    final res = await _client.dio.get('/appointment-slots', queryParameters: {
+      'branchId': branchId,
+      'date':
+          '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
+    });
+    return AppointmentSlots.fromJson(res.data['data'] as Map<String, dynamic>);
+  }
+
+  // PATCH /service-requests/:id/reschedule — online only (the server checks
+  // slot capacity at that moment). Moves the job to RESCHEDULED.
+  Future<void> reschedule(String id,
+      {required DateTime date, required String slot, String? reason}) async {
+    try {
+      await _client.dio.patch('/service-requests/$id/reschedule', data: {
+        'scheduledDate': DateTime(date.year, date.month, date.day)
+            .toIso8601String(),
+        'scheduledSlot': slot,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      });
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      if (body is Map && body['message'] is String) {
+        throw SyncRejectedException(body['message'] as String);
+      }
+      rethrow;
+    }
   }
 
   Future<ServiceDiagnostics> getServiceDiagnostics(String serviceId) async {

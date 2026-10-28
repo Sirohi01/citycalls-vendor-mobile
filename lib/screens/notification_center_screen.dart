@@ -14,7 +14,7 @@ class NotificationCenterScreen extends ConsumerWidget {
   Future<void> _markAllRead(WidgetRef ref, List<AppNotification> unread) async {
     final repo = ref.read(notificationRepositoryProvider);
     await Future.wait(
-        unread.map((n) => repo.markRead(n.id).catchError((_) {})));
+        unread.map((n) => repo.markRead(n).catchError((_) {})));
     ref.invalidate(notificationsProvider);
     ref.invalidate(unreadNotificationCountProvider);
   }
@@ -96,7 +96,7 @@ class _NotificationTile extends ConsumerWidget {
           ? null
           : () async {
               try {
-                await ref.read(notificationRepositoryProvider).markRead(n.id);
+                await ref.read(notificationRepositoryProvider).markRead(n);
               } catch (_) {
                 // Stays unread; the next refresh reflects the real state.
               }

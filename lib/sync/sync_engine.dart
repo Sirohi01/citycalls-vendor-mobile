@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart';
 import '../data/api_client.dart';
 import 'sync_repository.dart';
 
@@ -90,6 +91,29 @@ class SyncEngine {
         }
       }
       return allOk;
+    } on DioException catch (e) {
+      // The server answered but refused the whole batch (validation 400,
+      // access 403 from the menu-access guard, 404 job not visible to this
+      // technician…). Retrying the identical batch can never succeed, so
+      // these become REJECTED with the server's message — otherwise they'd
+      // sit as "waiting to sync" forever while the screen claims success.
+      // 401 (session), 408/429 (timeout / rate limit) and 5xx stay PENDING.
+      final code = e.response?.statusCode;
+      final permanent = code != null &&
+          code >= 400 &&
+          code < 500 &&
+          code != 401 &&
+          code != 408 &&
+          code != 429;
+      if (!permanent) return false;
+      final body = e.response?.data;
+      final message = body is Map && body['message'] is String
+          ? body['message'] as String
+          : 'Rejected by server ($code)';
+      for (final action in pending) {
+        await _repo.markRejected(action.id, message);
+      }
+      return false;
     } catch (_) {
       // Network/server unreachable — leave everything PENDING for the next
       // connectivity-triggered or manual sync attempt. Not an error the user

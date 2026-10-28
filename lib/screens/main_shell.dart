@@ -161,7 +161,7 @@ class _MainShellState extends ConsumerState<MainShell>
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.dark,
-        systemNavigationBarColor: Colors.white,
+        systemNavigationBarColor: AppColors.page,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: PopScope(
@@ -170,29 +170,13 @@ class _MainShellState extends ConsumerState<MainShell>
           if (!didPop) _handleBack();
         },
         child: Scaffold(
+          // Content scrolls underneath the floating bottom bar.
+          extendBody: true,
           body: IndexedStack(index: _index, children: _tabs),
           bottomNavigationBar: AppBottomNav(
             currentIndex: _index,
             onTap: _selectTab,
-            items: [
-              const AppNavItemData(
-                  icon: Icons.space_dashboard_outlined,
-                  activeIcon: Icons.space_dashboard_rounded,
-                  label: 'Home'),
-              AppNavItemData(
-                  icon: Icons.work_outline_rounded,
-                  activeIcon: Icons.work_rounded,
-                  label: 'My Jobs',
-                  badge: newJobs),
-              const AppNavItemData(
-                  icon: Icons.history_rounded,
-                  activeIcon: Icons.history_rounded,
-                  label: 'History'),
-              const AppNavItemData(
-                  icon: Icons.person_outline_rounded,
-                  activeIcon: Icons.person_rounded,
-                  label: 'Profile'),
-            ],
+            items: fieldNavItems(newJobs: newJobs),
           ),
         ),
       ),

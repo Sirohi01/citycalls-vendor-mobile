@@ -70,7 +70,18 @@ class AuthRepository {
     return AuthUser.fromMeJson(res.data['data'] as Map<String, dynamic>);
   }
 
+  // Revokes the refresh token server-side (POST /auth/logout) before
+  // clearing it here, so a lost or shared phone can't keep the session
+  // alive. Best-effort: offline, the local logout still happens.
   Future<void> logout() async {
+    try {
+      final refreshToken = await _client.readRefreshToken();
+      if (refreshToken != null) {
+        await _client.dio
+            .post('/auth/logout', data: {'refreshToken': refreshToken})
+            .timeout(const Duration(seconds: 6));
+      }
+    } catch (_) {}
     await _client.clearAccessToken();
     await clearCachedUser();
   }

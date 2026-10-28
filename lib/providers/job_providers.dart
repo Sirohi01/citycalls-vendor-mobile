@@ -5,6 +5,7 @@ import '../data/invoice_repository.dart';
 import '../models/job_models.dart';
 import '../models/invoice_models.dart';
 import '../models/estimate_models.dart';
+import '../models/visit_models.dart';
 import 'auth_providers.dart';
 import 'sync_providers.dart';
 
@@ -71,4 +72,9 @@ final serviceDiagnosticsProvider =
 final paymentsForInvoiceProvider =
     FutureProvider.family<List<PaymentReceipt>, String>((ref, invoiceId) {
   return ref.watch(invoiceRepositoryProvider).listPayments(invoiceId);
+});
+
+final jobVisitsProvider =
+    FutureProvider.family<List<ServiceVisit>, String>((ref, jobId) {
+  return ref.watch(jobRepositoryProvider).getVisits(jobId);
 });

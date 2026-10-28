@@ -1,25 +1,33 @@
 import 'api_client.dart';
 import '../models/notification_models.dart';
 
-// Online-only, same as estimate_repository.dart/invoice_repository.dart.
-// Backs the Notification Center screen — GET /notifications already existed
-// server-side (per docs/11-complete-api-contracts.md's Notifications row),
-// this app just wasn't consuming it yet.
+// Online-only. Backs the Notification Center and the unread badges.
+//
+// GET /notifications returns one document per channel per event and
+// GET /notifications/unread-count counts all of them (including SMS/WhatsApp
+// copies nothing ever marks read), so both the list and the badge are built
+// here from the grouped list instead — see AppNotification.group.
 class NotificationRepository {
   final ApiClient _client;
   NotificationRepository(this._client);
 
   Future<List<AppNotification>> listNotifications() async {
-    final res = await _client.dio.get('/notifications', queryParameters: {'limit': 50});
-    return (res.data['data'] as List).map((n) => AppNotification.fromJson(n as Map<String, dynamic>)).toList();
+    final res = await _client.dio
+        .get('/notifications', queryParameters: {'limit': 100});
+    final raw = (res.data['data'] as List)
+        .map((n) => AppNotification.fromJson(n as Map<String, dynamic>))
+        .toList();
+    return AppNotification.group(raw);
   }
 
   Future<int> unreadCount() async {
-    final res = await _client.dio.get('/notifications/unread-count');
-    return (res.data['data']['count'] as num).toInt();
+    final items = await listNotifications();
+    return items.where((n) => !n.isRead).length;
   }
 
-  Future<void> markRead(String id) async {
-    await _client.dio.patch('/notifications/$id/read');
+  /// Marks every channel copy of [notification] as read.
+  Future<void> markRead(AppNotification notification) async {
+    await Future.wait(notification.ids
+        .map((id) => _client.dio.patch('/notifications/$id/read')));
   }
 }

@@ -7,6 +7,7 @@ import '../providers/employee_providers.dart';
 import '../providers/push_providers.dart';
 import '../providers/sync_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_bottom_nav.dart';
 import '../widgets/hero_header.dart';
 import '../widgets/state_views.dart';
 import '../widgets/ui_kit.dart';
@@ -40,7 +41,7 @@ class ProfileScreen extends ConsumerWidget {
           color: AppColors.green,
           onRefresh: () async => ref.invalidate(myEmployeeProfileProvider),
           child: ListView(
-            padding: const EdgeInsets.only(bottom: 32),
+            padding: EdgeInsets.only(bottom: bottomNavClearance(context)),
             children: [
               _Header(
                 name: profile.valueOrNull?.name ?? user?.name ?? '',

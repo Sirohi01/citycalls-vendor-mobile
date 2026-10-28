@@ -2,13 +2,16 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/job_models.dart';
+import '../providers/notification_providers.dart';
 import '../providers/vendor_management_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_bottom_nav.dart';
 import 'package:flutter/services.dart';
 import '../widgets/hero_header.dart';
 import '../widgets/job_card.dart';
 import '../widgets/state_views.dart';
 import '../widgets/ui_kit.dart';
+import 'notification_center_screen.dart';
 
 class VendorDashboardScreen extends ConsumerWidget {
   final VoidCallback onLogout;
@@ -31,7 +34,7 @@ class VendorDashboardScreen extends ConsumerWidget {
             ref.invalidate(vendorTechniciansProvider);
           },
           child: ListView(
-            padding: EdgeInsets.zero,
+            padding: EdgeInsets.only(bottom: bottomNavClearance(context)),
             children: [
               _Header(
                   vendorAsync: vendorAsync,
@@ -104,6 +107,24 @@ class _Header extends StatelessWidget {
                         letterSpacing: 1.2)),
               ),
               const Spacer(),
+              // Owners get job notifications too (GET /notifications needs
+              // no permission) — same centre as the technician app.
+              Consumer(
+                builder: (context, ref, _) => HeroIconButton(
+                  icon: Icons.notifications_none_rounded,
+                  tooltip: 'Notifications',
+                  badge: ref
+                          .watch(unreadNotificationCountProvider)
+                          .valueOrNull ??
+                      0,
+                  onPressed: () => Navigator.of(context)
+                      .push(MaterialPageRoute(
+                          builder: (_) => const NotificationCenterScreen()))
+                      .then((_) =>
+                          ref.invalidate(unreadNotificationCountProvider)),
+                ),
+              ),
+              const SizedBox(width: 10),
               HeroIconButton(
                   icon: Icons.logout_rounded,
                   tooltip: 'Log out',
@@ -185,8 +206,10 @@ class _JobsOverview extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (total > 0) ...[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          // Equal-height cards; the week chart grows to fill its card.
+          IntrinsicHeight(
+            child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
                   flex: 5,
@@ -197,6 +220,7 @@ class _JobsOverview extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(flex: 4, child: _WeekTrend(jobs: jobs)),
             ],
+          ),
           ),
           const SizedBox(height: 20),
         ],
@@ -370,6 +394,7 @@ class _WeekTrend extends StatelessWidget {
                     color: strongSecondaryTextColor(context))),
           ),
           const SizedBox(height: 10),
+          const Spacer(),
           SizedBox(
             height: 108,
             child: BarChart(

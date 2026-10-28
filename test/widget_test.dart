@@ -15,7 +15,7 @@ void main() {
     await tester.pumpWidget(
         const ProviderScope(child: MaterialApp(home: OtpRequestScreen())));
 
-    expect(find.text('Welcome, Partner!'), findsOneWidget);
+    expect(find.text('Welcome, Partner'), findsOneWidget);
     expect(find.widgetWithText(TextFormField, 'Mobile number'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Send OTP'), findsOneWidget);
   });
@@ -25,7 +25,10 @@ void main() {
     await tester.pumpWidget(
         const ProviderScope(child: MaterialApp(home: OtpRequestScreen())));
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Send OTP'));
+    final sendOtp = find.widgetWithText(FilledButton, 'Send OTP');
+    await tester.ensureVisible(sendOtp);
+    await tester.pumpAndSettle();
+    await tester.tap(sendOtp);
     await tester.pump();
 
     expect(find.text('Enter a valid 10-digit mobile number'), findsOneWidget);

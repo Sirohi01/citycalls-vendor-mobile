@@ -12,10 +12,7 @@ import '../widgets/ui_kit.dart';
 import 'signature_capture_screen.dart';
 
 // Per docs/rohit/06-vendor-app-screen-list.md "Execution" — Completion screen.
-// Three completion-proof paths per completeVisitSchema's
-// COMPLETION_PROOF_TYPES: OTP (sent to the customer's phone, verified here),
-// SIGNATURE (captured on-device, uploaded like any other job image), and a
-// manual "app confirmation" fallback for when the customer is unreachable.
+// Customer proof: WhatsApp OTP or an uploaded customer signature.
 class CompletionScreen extends ConsumerStatefulWidget {
   final String jobId;
   const CompletionScreen({super.key, required this.jobId});
@@ -46,8 +43,8 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
       await ref.read(jobRepositoryProvider).requestCompletionOtp(widget.jobId);
       if (!mounted) return;
       setState(() => _otpRequested = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("OTP sent to the customer's phone.")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Completion OTP sent to the customer's WhatsApp.")));
     } catch (e) {
       if (mounted) setState(() => _error = describeError(e));
     } finally {
@@ -119,29 +116,6 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
     });
   }
 
-  Future<void> _completeWithoutOtp() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Complete without customer proof?'),
-        content: const Text(
-            'Use this only if the customer cannot be reached. It is recorded as an app-only confirmation, not a customer-verified one.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              style: FilledButton.styleFrom(minimumSize: const Size(150, 44)),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Complete Anyway')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await _finish((repo) =>
-        repo.completeVisit(widget.jobId, proofType: 'APP_CONFIRMATION'));
-  }
-
   @override
   Widget build(BuildContext context) {
     final busy = _submitting || _requestingOtp;
@@ -154,7 +128,7 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
               'Get the customer to confirm the work is done — by OTP or by signing on your phone.'),
           const SizedBox(height: 20),
           InlineError(_error),
-          const UiSectionLabel('Option 1 — Customer OTP'),
+          const UiSectionLabel('Option 1 — Customer WhatsApp OTP'),
           UiCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -235,13 +209,8 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          Center(
-            child: TextButton(
-              onPressed: busy ? null : _completeWithoutOtp,
-              style: TextButton.styleFrom(foregroundColor: AppColors.muted),
-              child: const Text('Customer unreachable? Complete without proof'),
-            ),
-          ),
+          const Text(
+              'Customer unavailable? Keep the job on hold and contact the office.'),
         ],
       ),
     );

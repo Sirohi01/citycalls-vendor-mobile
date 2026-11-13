@@ -70,23 +70,29 @@ class SyncEngine {
         .toList();
 
     try {
-      final res = await _client.dio.post('/service-requests/$jobId/sync-batch', data: {'actions': actionsPayload});
+      final res = await _client.dio.post('/service-requests/$jobId/sync-batch',
+          data: {'actions': actionsPayload});
       final results = (res.data['data'] as List).cast<Map<String, dynamic>>();
       final byKey = {for (final r in results) r['idempotencyKey'] as String: r};
 
       var allOk = true;
       for (final action in pending) {
         final result = byKey[action.idempotencyKey];
-        if (result == null) continue; // Server didn't report on it — leave PENDING, retry next flush.
+        if (result == null) {
+          allOk = false;
+          continue;
+        } // Server didn't report on it — leave PENDING, retry next flush.
         final status = result['status'] as String?;
         if (status == 'APPLIED' || status == 'REPLAYED') {
-          await _repo.markSynced(action.id, message: result['message'] as String?);
+          await _repo.markSynced(action.id,
+              message: result['message'] as String?);
         } else {
           // REJECTED — a genuine conflict (e.g. stale status transition),
           // not a connectivity problem. Surfaced on the Sync Issues screen,
           // never silently retried per the functional plan's "never silently
           // drop a conflict."
-          await _repo.markRejected(action.id, (result['message'] as String?) ?? 'Rejected by server');
+          await _repo.markRejected(action.id,
+              (result['message'] as String?) ?? 'Rejected by server');
           allOk = false;
         }
       }

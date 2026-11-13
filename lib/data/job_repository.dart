@@ -35,6 +35,10 @@ class JobRepository {
         .toList();
   }
 
+  Future<void> allocateTechnician(String id, String? userId, {String? reason}) async {
+    await _client.dio.patch('/service-requests/$id/vendor-technician', data: {'technicianUserId': userId, if (reason != null) 'reason': reason});
+  }
+
   Future<JobDetail> getJob(String id) async {
     final res = await _client.dio.get('/service-requests/$id');
     return JobDetail.fromJson(res.data['data'] as Map<String, dynamic>);
@@ -70,8 +74,8 @@ class JobRepository {
       {required DateTime date, required String slot, String? reason}) async {
     try {
       await _client.dio.patch('/service-requests/$id/reschedule', data: {
-        'scheduledDate': DateTime(date.year, date.month, date.day)
-            .toIso8601String(),
+        'scheduledDate':
+            DateTime(date.year, date.month, date.day).toIso8601String(),
         'scheduledSlot': slot,
         if (reason != null && reason.isNotEmpty) 'reason': reason,
       });
@@ -140,11 +144,13 @@ class JobRepository {
   }
 
   Future<void> updateWork(String id,
-      {double? labourCharge,
+      {List<String>? checklist,
+      double? labourCharge,
       String? workNotes,
       List<String>? beforeImages,
       List<String>? afterImages}) {
     return _runQueued(id, 'UPDATE_WORK', {
+      if (checklist != null) 'checklist': checklist,
       if (labourCharge != null) 'labourCharge': labourCharge,
       if (workNotes != null && workNotes.isNotEmpty) 'workNotes': workNotes,
       if (beforeImages != null && beforeImages.isNotEmpty)

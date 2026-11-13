@@ -21,18 +21,20 @@ class VendorCompany {
 }
 
 class VendorTechnicianEntry {
+  final String userId;
   final String id;
   final String? name;
   final String? mobile;
   final List<String> skills;
   final bool active;
 
-  VendorTechnicianEntry({required this.id, this.name, this.mobile, required this.skills, required this.active});
+  VendorTechnicianEntry({this.userId = '', required this.id, this.name, this.mobile, required this.skills, required this.active});
 
   factory VendorTechnicianEntry.fromJson(Map<String, dynamic> json) {
     final user = json['userId'] as Map<String, dynamic>?;
     return VendorTechnicianEntry(
       id: json['_id'] as String,
+      userId: user?['_id'] as String? ?? (json['userId'] is String ? json['userId'] as String : ''),
       name: user?['name'] as String?,
       mobile: user?['mobile'] as String?,
       skills: (json['skills'] as List? ?? []).cast<String>(),

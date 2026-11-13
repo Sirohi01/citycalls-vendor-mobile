@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/invoice_models.dart';
@@ -24,7 +25,9 @@ class InvoiceScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final invoiceAsync = ref.watch(invoiceForRequestProvider(job.id));
     return Scaffold(
-      appBar: AppBar(title: const Text('Invoice & Payment')),
+      appBar: AppBar(title: const Text('Invoice & Payment'), actions: [IconButton(tooltip: 'Download invoice PDF', icon: const Icon(Icons.download_outlined), onPressed: () async {
+        try { final invoice = await ref.read(invoiceRepositoryProvider).getInvoiceForRequest(job.id); if (invoice == null) return; final url = await ref.read(invoiceRepositoryProvider).documentUrl('INVOICE', invoice.id); await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication); } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not download PDF: $e'))); }
+      })]),
       body: invoiceAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, __) => Center(
@@ -153,6 +156,7 @@ class _GenerateFromEstimateViewState
 
   @override
   Widget build(BuildContext context) {
+    if (widget.job.hasAgreedPrice) return _AgreedBookingBill(job: widget.job);
     if (_manualOverride) return _CreateInvoiceView(job: widget.job);
 
     final estimateAsync =
@@ -714,4 +718,54 @@ class _PaymentViewState extends ConsumerState<_PaymentView> {
       ),
     );
   }
+}
+
+class _AgreedBookingBill extends ConsumerStatefulWidget {
+  final JobDetail job;
+  const _AgreedBookingBill({required this.job});
+  @override
+  ConsumerState<_AgreedBookingBill> createState() => _AgreedBookingBillState();
+}
+
+class _AgreedBookingBillState extends ConsumerState<_AgreedBookingBill> {
+  bool _busy = false;
+  String? _error;
+  Future<void> _create() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(invoiceRepositoryProvider).createInvoice(
+          customerId: widget.job.customerId,
+          branchId: widget.job.branchId,
+          serviceRequestId: widget.job.id,
+          items: [
+            InvoiceLineItem(
+                description: widget.job.serviceName ?? 'Booked service',
+                qty: 1,
+                unitPrice: widget.job.agreedTotal)
+          ]);
+      ref.invalidate(invoiceForRequestProvider(widget.job.id));
+    } catch (e) {
+      if (mounted) setState(() => _error = describeError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _StatusPanel(
+          icon: Icons.receipt_long_outlined,
+          color: AppColors.green,
+          title: widget.job.priceDescription,
+          amount: widget.job.agreedTotal,
+          message:
+              'Bill the amount agreed at booking. Any additional work requires a separately approved estimate.',
+          error: _error,
+          actions: [
+            FilledButton(
+                onPressed: _busy ? null : _create,
+                child: Text(_busy ? 'Creating…' : 'Create Booking Invoice'))
+          ]);
 }

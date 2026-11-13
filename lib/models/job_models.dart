@@ -182,6 +182,15 @@ class ServiceDiagnostics {
 }
 
 class JobDetail {
+  final String? vendorTechnicianUserId;
+  final List<String> mandatoryChecklist;
+  final Map<String, dynamic>? bookingPrice;
+  bool get hasAgreedPrice =>
+      bookingPrice != null && bookingPrice!['mode'] != 'ESTIMATE';
+  double get agreedTotal => (bookingPrice?['total'] as num?)?.toDouble() ?? 0;
+  String get priceDescription => bookingPrice?['mode'] == 'HOURLY'
+      ? '₹${bookingPrice?['unitPrice']} / hr × ${bookingPrice?['hours']} hours × ${bookingPrice?['helpers']} helpers'
+      : 'Fixed service price';
   final String id;
   final String number;
   final String? serviceId;
@@ -202,6 +211,9 @@ class JobDetail {
   final CustomerProductInfo? product;
 
   JobDetail({
+    this.vendorTechnicianUserId,
+    this.mandatoryChecklist = const [],
+    this.bookingPrice,
     required this.id,
     required this.number,
     this.serviceId,
@@ -237,6 +249,10 @@ class JobDetail {
       address?['pinCode']
     ].where((s) => s != null && (s as String).isNotEmpty).join(', ');
     return JobDetail(
+      mandatoryChecklist:
+          (service?['mandatoryChecklist'] as List? ?? []).cast<String>(),
+      vendorTechnicianUserId: json['vendorTechnicianUserId'] as String?,
+      bookingPrice: json['bookingPrice'] as Map<String, dynamic>?,
       id: json['_id'] as String,
       number: json['number'] as String,
       serviceId: service?['_id'] as String?,

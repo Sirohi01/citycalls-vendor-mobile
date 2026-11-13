@@ -1,3 +1,4 @@
+import '../providers/vendor_management_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,6 +38,24 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     ref.invalidate(jobDetailProvider(widget.jobId));
     ref.invalidate(jobVisitsProvider(widget.jobId));
     ref.invalidate(allJobsProvider);
+  }
+
+  Future<void> _allocate(JobDetail job) async {
+    try {
+      final staff = await ref.read(vendorTechniciansProvider.future);
+      if (!mounted) return;
+      final selected = await showDialog<String>(context: context, builder: (ctx) => SimpleDialog(title: const Text('Assign technician'), children: [
+        for (final technician in staff.where((t) => t.active && t.userId.isNotEmpty)) SimpleDialogOption(onPressed: () => Navigator.pop(ctx, technician.userId), child: Text(technician.name ?? 'Technician')),
+      ]));
+      if (selected == null) return;
+      if (!mounted) return;
+      final controller = TextEditingController();
+      final accepted = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const Text('Assignment note'), content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'Reason / handover details')), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Assign'))]));
+      final reason = controller.text.trim(); controller.dispose();
+      if (accepted != true) return;
+      await ref.read(jobRepositoryProvider).allocateTechnician(job.id, selected, reason: reason);
+      _refresh();
+    } catch (e) { if (mounted) setState(() => _error = describeError(e)); }
   }
 
   // Runs one or more status changes as a single user action. Each step is
@@ -196,6 +215,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
                     padding: const EdgeInsets.only(bottom: 28),
                     children: [
                       _JobHero(job: j),
+                      if (managerView) Padding(padding: const EdgeInsets.all(16), child: OutlinedButton.icon(onPressed: () => _allocate(j), icon: const Icon(Icons.person_add_alt), label: Text(j.vendorTechnicianUserId == null ? 'Assign Technician' : 'Change Technician'))),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
                         child: Column(
@@ -245,7 +265,14 @@ class _JobHero extends StatelessWidget {
   final JobDetail job;
   const _JobHero({required this.job});
 
-  static const _steps = ['Accept', 'Travel', 'Inspect', 'Work', 'Payment', 'Done'];
+  static const _steps = [
+    'Accept',
+    'Travel',
+    'Inspect',
+    'Work',
+    'Payment',
+    'Done'
+  ];
 
   // Which of [_steps] a status is on; null hides the stepper
   // (cancelled / handed back jobs).
@@ -342,6 +369,10 @@ class _JobHero extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
+                if (job.hasAgreedPrice)
+                  Text(
+                      '${job.priceDescription} · ₹${job.agreedTotal.toStringAsFixed(2)}',
+                      style: const TextStyle(color: Colors.white)),
                 Text(job.serviceName ?? 'Service Request',
                     style: const TextStyle(
                         color: Colors.white,
@@ -514,9 +545,7 @@ class _Stepper extends StatelessWidget {
             : current
                 ? Colors.white
                 : Colors.white.withValues(alpha: 0.10),
-        border: current
-            ? Border.all(color: AppColors.lime400, width: 3)
-            : null,
+        border: current ? Border.all(color: AppColors.lime400, width: 3) : null,
         boxShadow: current
             ? [
                 BoxShadow(
@@ -669,8 +698,8 @@ class _ActionBar extends StatelessWidget {
             ? _buildForStatus(context)
             : null)
         : _buildForStatus(context);
-    final showSupplementaryEstimate = !managerView &&
-        _supplementaryEstimateStatuses.contains(job.status);
+    final showSupplementaryEstimate =
+        !managerView && _supplementaryEstimateStatuses.contains(job.status);
     final showHold = !managerView &&
         (job.status == 'WORK_STARTED' || job.status == 'WORK_IN_PROGRESS');
     if (content == null && !showSupplementaryEstimate) {
@@ -716,16 +745,16 @@ class _ActionBar extends StatelessWidget {
                           Container(
                               width: 1,
                               height: 18,
-                              margin:
-                                  const EdgeInsets.symmetric(horizontal: 4),
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
                               color: AppColors.line),
                         ],
                         TextButton.icon(
                           onPressed: () =>
                               _open(context, EstimateFormScreen(job: job)),
                           icon: const Icon(Icons.add_circle_outline, size: 18),
-                          label: Text(
-                              showHold ? 'Add estimate' : 'Add Additional Estimate'),
+                          label: Text(showHold
+                              ? 'Add estimate'
+                              : 'Add Additional Estimate'),
                         ),
                       ],
                     ),
@@ -808,6 +837,13 @@ class _ActionBar extends StatelessWidget {
         );
 
       case 'TECHNICIAN_ARRIVED':
+        if (job.hasAgreedPrice) {
+          return FilledButton.icon(
+              onPressed: () => onChangeStatus('WORK_STARTED'),
+              icon: const Icon(Icons.build_outlined),
+              label:
+                  Text('Start Work · ₹${job.agreedTotal.toStringAsFixed(2)}'));
+        }
         return Row(
           children: [
             Expanded(
@@ -842,24 +878,10 @@ class _ActionBar extends StatelessWidget {
         );
 
       case 'INSPECTION_COMPLETED':
-        return Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => _open(context, EstimateFormScreen(job: job)),
-                icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                label: const Text('Estimate'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: () => onChangeStatus('WORK_STARTED'),
-                icon: const Icon(Icons.build_outlined, size: 18),
-                label: const Text('Start Work'),
-              ),
-            ),
-          ],
+        return FilledButton.icon(
+          onPressed: () => _open(context, EstimateFormScreen(job: job)),
+          icon: const Icon(Icons.receipt_long_outlined, size: 18),
+          label: const Text('Prepare Estimate for Approval'),
         );
 
       case 'ESTIMATE_APPROVED':
@@ -1237,7 +1259,8 @@ class _VisitCard extends StatelessWidget {
                 '₹${visit.labourCharge!.round()}'),
           if (visit.workNotes?.isNotEmpty ?? false)
             row(Icons.notes_rounded, 'Work notes', visit.workNotes!),
-          if (visit.beforeImages.isNotEmpty || visit.afterImages.isNotEmpty) ...[
+          if (visit.beforeImages.isNotEmpty ||
+              visit.afterImages.isNotEmpty) ...[
             const SizedBox(height: 8),
             SizedBox(
               height: 78,

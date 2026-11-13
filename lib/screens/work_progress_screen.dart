@@ -21,6 +21,7 @@ class WorkProgressScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkProgressScreenState extends ConsumerState<WorkProgressScreen> {
+  final Set<String> _checklist = {};
   final _notesController = TextEditingController();
   final _labourController = TextEditingController();
   final List<File> _beforePhotos = [];
@@ -31,6 +32,16 @@ class _WorkProgressScreenState extends ConsumerState<WorkProgressScreen> {
   bool _submitting = false;
   String? _progress;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(jobRepositoryProvider).getVisits(widget.jobId).then((visits) {
+      if (mounted) {
+        setState(() => _checklist.addAll(visits.expand((v) => v.checklist)));
+      }
+    }).catchError((Object _) {});
+  }
 
   @override
   void dispose() {
@@ -96,6 +107,7 @@ class _WorkProgressScreenState extends ConsumerState<WorkProgressScreen> {
     }
     if (_notesController.text.trim().isEmpty &&
         labour == null &&
+        _checklist.isEmpty &&
         _beforePhotos.isEmpty &&
         _afterPhotos.isEmpty) {
       setState(() => _error = 'Add notes, a labour charge or a photo first.');
@@ -117,6 +129,7 @@ class _WorkProgressScreenState extends ConsumerState<WorkProgressScreen> {
       if (mounted) setState(() => _progress = 'Saving…');
       await repo.updateWork(
         widget.jobId,
+        checklist: _checklist.toList(),
         labourCharge: labour,
         workNotes: _notesController.text.trim(),
         beforeImages: beforeUrls.isEmpty ? null : beforeUrls,
@@ -150,11 +163,28 @@ class _WorkProgressScreenState extends ConsumerState<WorkProgressScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final job = ref.watch(jobDetailProvider(widget.jobId)).asData?.value;
     return Scaffold(
       appBar: AppBar(title: const Text('Work Progress')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
+          if (job != null)
+            ...job.mandatoryChecklist.map((item) => CheckboxListTile(
+                title: Text(item),
+                value: _checklist.contains(item),
+                onChanged: _submitting
+                    ? null
+                    : (checked) => setState(() {
+                          if (checked == true) {
+                            _checklist.add(item);
+                          } else {
+                            _checklist.remove(item);
+                          }
+                        }))),
+          if (job?.hasAgreedPrice == true)
+            InfoNote(
+                '${job!.priceDescription} · ₹${job.agreedTotal.toStringAsFixed(2)} agreed at booking. Extra charges require approval.'),
           const UiSectionLabel('Work notes'),
           UiCard(
             child: TextField(
@@ -166,9 +196,11 @@ class _WorkProgressScreenState extends ConsumerState<WorkProgressScreen> {
             ),
           ),
           const SizedBox(height: 22),
-          const UiSectionLabel('Labour charge (optional)'),
+          if (job?.hasAgreedPrice != true)
+            const UiSectionLabel('Labour charge (optional)'),
           UiCard(
             child: TextField(
+              enabled: job?.hasAgreedPrice != true,
               controller: _labourController,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),

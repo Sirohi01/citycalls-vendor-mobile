@@ -18,6 +18,7 @@ class VisitPart {
 }
 
 class ServiceVisit {
+  final List<String> checklist;
   final String id;
   final int visitNumber;
   final DateTime? startedAt;
@@ -34,6 +35,7 @@ class ServiceVisit {
   final String? completionProofType;
 
   ServiceVisit({
+    this.checklist = const [],
     required this.id,
     required this.visitNumber,
     this.startedAt,
@@ -59,6 +61,7 @@ class ServiceVisit {
     List<String> strings(Object? v) =>
         (v as List? ?? const []).whereType<String>().toList();
     return ServiceVisit(
+      checklist: strings(json['checklist']),
       id: json['_id'] as String? ?? '',
       visitNumber: (json['visitNumber'] as num?)?.toInt() ?? 1,
       startedAt: _date(json['startedAt']),

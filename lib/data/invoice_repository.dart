@@ -1,3 +1,4 @@
+import 'package:uuid/uuid.dart';
 import 'api_client.dart';
 import '../models/invoice_models.dart';
 
@@ -7,37 +8,48 @@ import '../models/invoice_models.dart';
 // server-side (payments.service.ts's existing recordPayment sync) — this
 // app just needs to re-fetch the job after.
 class InvoiceRepository {
+  final Map<String, String> _collectionKeys = {};
   final ApiClient _client;
   InvoiceRepository(this._client);
 
   // The job's live invoice — newest first, skipping CANCELLED ones (a
   // cancelled invoice can't take payments; the office may have re-billed).
   Future<Invoice?> getInvoiceForRequest(String serviceRequestId) async {
-    final res = await _client.dio.get('/invoices', queryParameters: {'serviceRequestId': serviceRequestId, 'limit': 10});
-    final items = (res.data['data'] as List).map((i) => Invoice.fromJson(i as Map<String, dynamic>));
+    final res = await _client.dio.get('/invoices',
+        queryParameters: {'serviceRequestId': serviceRequestId, 'limit': 10});
+    final items = (res.data['data'] as List)
+        .map((i) => Invoice.fromJson(i as Map<String, dynamic>));
     return items.where((i) => i.status != 'CANCELLED').firstOrNull;
   }
 
   // The bill still in play — CANCELLED ones are dead and CONVERTED ones have
   // already become the invoice above, so neither should hold the screen on
   // "waiting for the customer".
-  Future<ProformaInvoice?> getProformaForRequest(String serviceRequestId) async {
-    final res = await _client.dio.get('/proforma-invoices', queryParameters: {'serviceRequestId': serviceRequestId, 'limit': 10});
-    final items = (res.data['data'] as List).map((p) => ProformaInvoice.fromJson(p as Map<String, dynamic>));
-    return items.where((p) => p.status != 'CANCELLED' && p.status != 'CONVERTED').firstOrNull;
+  Future<ProformaInvoice?> getProformaForRequest(
+      String serviceRequestId) async {
+    final res = await _client.dio.get('/proforma-invoices',
+        queryParameters: {'serviceRequestId': serviceRequestId, 'limit': 10});
+    final items = (res.data['data'] as List)
+        .map((p) => ProformaInvoice.fromJson(p as Map<String, dynamic>));
+    return items
+        .where((p) => p.status != 'CANCELLED' && p.status != 'CONVERTED')
+        .firstOrNull;
   }
 
   // Carries the approved Estimate's exact items straight through to a
   // customer-facing bill — no re-typing. Stops at SHARED; the customer still
   // has to accept it (their own app) before convertProformaToInvoice below
   // will succeed.
-  Future<ProformaInvoice> generateProformaInvoice(String serviceRequestId) async {
-    final res = await _client.dio.post('/service-requests/$serviceRequestId/generate-proforma-invoice');
+  Future<ProformaInvoice> generateProformaInvoice(
+      String serviceRequestId) async {
+    final res = await _client.dio
+        .post('/service-requests/$serviceRequestId/generate-proforma-invoice');
     return ProformaInvoice.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
   Future<Invoice> convertProformaToInvoice(String proformaId) async {
-    final res = await _client.dio.post('/proforma-invoices/$proformaId/convert');
+    final res =
+        await _client.dio.post('/proforma-invoices/$proformaId/convert');
     return Invoice.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
@@ -56,16 +68,31 @@ class InvoiceRepository {
     return Invoice.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
-  Future<void> recordPayment(String invoiceId, {required double amount, required String method, String? reference}) async {
+  Future<void> recordPayment(String invoiceId,
+      {required double amount,
+      required String method,
+      String? reference}) async {
+    final fingerprint = '$invoiceId:$amount:$method:${reference ?? ''}';
+    final key =
+        _collectionKeys.putIfAbsent(fingerprint, () => const Uuid().v4());
     await _client.dio.post('/invoices/$invoiceId/payments', data: {
+      'idempotencyKey': key,
       'amount': amount,
       'method': method,
       if (reference != null && reference.isNotEmpty) 'reference': reference,
     });
+    _collectionKeys.remove(fingerprint);
+  }
+
+  Future<String> documentUrl(String type, String id) async {
+    final res = await _client.dio.get('/financial-documents/$type/$id/download');
+    return Uri.parse(_client.dio.options.baseUrl).resolve(res.data['data']['url'] as String).toString();
   }
 
   Future<List<PaymentReceipt>> listPayments(String invoiceId) async {
     final res = await _client.dio.get('/invoices/$invoiceId/payments');
-    return (res.data['data'] as List).map((p) => PaymentReceipt.fromJson(p as Map<String, dynamic>)).toList();
+    return (res.data['data'] as List)
+        .map((p) => PaymentReceipt.fromJson(p as Map<String, dynamic>))
+        .toList();
   }
 }

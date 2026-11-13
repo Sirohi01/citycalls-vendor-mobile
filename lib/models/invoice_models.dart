@@ -2,7 +2,7 @@
 // app needs to bill a completed job and collect payment from the field.
 // Independently maintained from citycalls-admin-web's and
 // citycalls-customer-mobile's copies — no shared package between the apps.
-const paymentMethods = ['CASH', 'UPI', 'CARD', 'BANK_TRANSFER', 'GATEWAY', 'CHEQUE', 'CREDIT'];
+const paymentMethods = ['CASH', 'UPI', 'CARD', 'BANK_TRANSFER', 'CHEQUE', 'CREDIT'];
 
 class InvoiceLineItem {
   final String description;

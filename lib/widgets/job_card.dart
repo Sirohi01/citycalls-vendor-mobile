@@ -6,8 +6,9 @@ import 'ui_kit.dart';
 
 // One job in a list — used by Dashboard, My Jobs, History and the vendor
 // owner's dashboard so a job always reads the same way. A status-coloured
-// strip runs down the left edge. [highlight] marks a new assignment that
-// still needs Accept/Reject; [compact] drops the customer/time rows.
+// bar runs down the left side. [highlight] marks a new assignment that
+// still needs Accept/Reject; [compact] (History) shows one customer/date line
+// instead of the full customer and time rows.
 class JobCard extends StatelessWidget {
   final JobSummary job;
   final bool highlight;
@@ -40,7 +41,16 @@ class JobCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(width: 5, color: accent),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 16, 0, 16),
+              child: Container(
+                width: 4,
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
@@ -94,6 +104,17 @@ class JobCard extends StatelessWidget {
                               icon: Icons.bolt_rounded),
                       ],
                     ),
+                    if (compact) ...[
+                      const SizedBox(height: 10),
+                      _CompactMeta(
+                          customer: [
+                            job.customerName ?? 'Customer',
+                            if (job.city.isNotEmpty) job.city,
+                          ].join(' • '),
+                          when: job.scheduledDate != null
+                              ? formatRelativeDay(job.scheduledDate)
+                              : null),
+                    ],
                     if (!compact) ...[
                       const SizedBox(height: 14),
                       Row(
@@ -237,6 +258,38 @@ class _Avatar extends StatelessWidget {
       child: Text(initials,
           style: TextStyle(
               fontSize: 12.5, fontWeight: FontWeight.w800, color: color)),
+    );
+  }
+}
+
+class _CompactMeta extends StatelessWidget {
+  final String customer;
+  final String? when;
+  const _CompactMeta({required this.customer, this.when});
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(
+        fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.muted);
+    return Row(
+      children: [
+        const Icon(Icons.person_outline_rounded,
+            size: 15, color: AppColors.faint),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(customer,
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+        ),
+        if (when != null) ...[
+          const SizedBox(width: 8),
+          const Icon(Icons.event_rounded, size: 14, color: AppColors.faint),
+          const SizedBox(width: 4),
+          Text(when!, style: style),
+        ],
+        const SizedBox(width: 6),
+        const Icon(Icons.chevron_right_rounded,
+            size: 18, color: AppColors.faint),
+      ],
     );
   }
 }

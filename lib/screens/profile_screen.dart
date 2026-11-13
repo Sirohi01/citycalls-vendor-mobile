@@ -7,6 +7,7 @@ import '../providers/employee_providers.dart';
 import '../providers/push_providers.dart';
 import '../providers/sync_providers.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_images.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../widgets/hero_header.dart';
 import '../widgets/state_views.dart';
@@ -103,6 +104,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return HeroHeader(
+      backgroundImage: AppImages.fieldService,
       child: Column(
         children: [
           const SizedBox(

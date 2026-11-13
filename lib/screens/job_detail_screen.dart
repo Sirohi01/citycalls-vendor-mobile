@@ -8,6 +8,7 @@ import '../models/visit_models.dart';
 import '../providers/auth_providers.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_images.dart';
 import '../widgets/hero_header.dart';
 import '../widgets/state_views.dart';
 import '../widgets/ui_kit.dart';
@@ -327,6 +328,7 @@ class _JobHero extends StatelessWidget {
     ].join(' • ');
 
     return HeroHeader(
+      backgroundImage: AppImages.appliancesDark,
       padding: const EdgeInsets.fromLTRB(12, 6, 16, 22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -435,12 +437,16 @@ class _HeroPill extends StatelessWidget {
                 decoration:
                     BoxDecoration(color: color, shape: BoxShape.circle)),
           const SizedBox(width: 6),
-          Text(text,
-              style: TextStyle(
-                  color: color,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.2)),
+          Flexible(
+            child: Text(text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2)),
+          ),
         ],
       ),
     );
@@ -459,11 +465,13 @@ class _HeroMeta extends StatelessWidget {
       children: [
         Icon(icon, size: 15, color: Colors.white.withValues(alpha: 0.55)),
         const SizedBox(width: 6),
-        Text(text,
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.8),
-                fontSize: 13,
-                fontWeight: FontWeight.w600)),
+        Flexible(
+          child: Text(text,
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600)),
+        ),
       ],
     );
   }
@@ -730,8 +738,9 @@ class _ActionBar extends StatelessWidget {
                 if (showSupplementaryEstimate)
                   Padding(
                     padding: EdgeInsets.only(top: content != null ? 6 : 0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         if (showHold) ...[
                           TextButton.icon(

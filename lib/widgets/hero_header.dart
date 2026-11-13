@@ -9,11 +9,15 @@ class HeroHeader extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double overlap;
+  // Optional photo behind the gradient (lib/theme/app_images.dart). It's
+  // heavily darkened so white text on top always stays readable.
+  final String? backgroundImage;
   const HeroHeader(
       {super.key,
       required this.child,
       this.padding = const EdgeInsets.fromLTRB(20, 10, 20, 28),
-      this.overlap = 0});
+      this.overlap = 0,
+      this.backgroundImage});
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +40,35 @@ class HeroHeader extends StatelessWidget {
         ),
         child: Stack(
           children: [
+            if (backgroundImage != null) ...[
+              // Extends 80px above the header and anchors bottom-right, so
+              // the top-left of the photo (where the source images carry a
+              // CityCalls logo) is clipped instead of showing behind the
+              // header's own wordmark.
+              Positioned(
+                left: 0,
+                right: 0,
+                top: -80,
+                bottom: 0,
+                child: Image.asset(backgroundImage!,
+                    fit: BoxFit.cover, alignment: Alignment.bottomRight),
+              ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        AppColors.heroDark.withValues(alpha: 0.96),
+                        AppColors.heroDark2.withValues(alpha: 0.86),
+                        AppColors.heroDark3.withValues(alpha: 0.62),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const Positioned.fill(child: CustomPaint(painter: _DotGrid())),
             Positioned(
               right: -90,

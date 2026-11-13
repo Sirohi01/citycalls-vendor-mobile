@@ -98,6 +98,10 @@ flutter:
   assets:
     - assets/images/logo.png
     - assets/login/splace.png
+    # Photos and illustrations reused from CityCalls' own customer app and
+    # admin login (see lib/theme/app_images.dart).
+    - assets/banners/
+    - assets/illustrations/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

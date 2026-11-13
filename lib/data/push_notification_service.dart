@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import '../app_navigator.dart';
 import '../screens/notification_center_screen.dart';
+import 'auth_repository.dart';
 import 'employee_repository.dart';
 
 // Registers this device's FCM token with the backend so PUSH-channel
@@ -14,40 +16,51 @@ import 'employee_repository.dart';
 // from citycalls-customer-mobile's copy — no shared code between the apps.
 class PushNotificationService {
   final EmployeeRepository _employeeRepo;
-  PushNotificationService(this._employeeRepo);
+  final AuthRepository _authRepo;
+  PushNotificationService(this._employeeRepo, this._authRepo);
 
   bool _tapHandlersAttached = false;
+  // Which endpoint holds this account's token: employees keep it on their
+  // Employee record, vendor staff on their User (no Employee record).
+  bool _onEmployeeRecord = true;
+
+  static bool isEmployeeRole(String? role) =>
+      role == 'EMPLOYEE' || role == 'TECHNICIAN';
 
   // Firebase only initializes when google-services.json (Android) /
   // GoogleService-Info.plist (iOS) is bundled — see main.dart. Without it
   // every FirebaseMessaging call throws, so the whole service is a no-op.
   bool get isAvailable => Firebase.apps.isNotEmpty;
 
-  // [canRegisterToken]: the backend only stores FCM tokens on Employee
-  // records (POST /employees/me/fcm-token). VENDOR_TECHNICIAN and vendor
-  // owners have no Employee record, so for them registration would just
-  // 404 — they still get in-app notifications via the Notification Center.
-  Future<void> initialize({required bool canRegisterToken}) async {
+  // Every role registers: EMPLOYEE/TECHNICIAN on POST /employees/me/fcm-token,
+  // vendor staff on POST /auth/me/fcm-token. (A backend without the second
+  // endpoint just 404s — swallowed; in-app notifications still work.)
+  Future<void> initialize({required String? role}) async {
     if (!isAvailable) return;
+    _onEmployeeRecord = isEmployeeRole(role);
     try {
       final messaging = FirebaseMessaging.instance;
       await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-      if (canRegisterToken) {
-        final token = await messaging.getToken();
-        if (token != null) await _registerSafely(token);
-        // Tokens rotate (reinstall, data clear, FCM-side refresh).
-        messaging.onTokenRefresh.listen(_registerSafely);
-      }
+      final token = await messaging.getToken();
+      if (token != null) await _registerSafely(token);
+      // Tokens rotate (reinstall, data clear, FCM-side refresh).
+      _tokenRefreshSub ??= messaging.onTokenRefresh.listen(_registerSafely);
       _attachTapHandlers(messaging);
     } catch (_) {
       // Push is best-effort — the app works fine without it.
     }
   }
 
+  StreamSubscription<String>? _tokenRefreshSub;
+
   Future<void> _registerSafely(String token) async {
     try {
-      await _employeeRepo.registerFcmToken(token);
+      if (_onEmployeeRecord) {
+        await _employeeRepo.registerFcmToken(token);
+      } else {
+        await _authRepo.registerUserFcmToken(token);
+      }
     } catch (_) {
       // Best-effort — retried on the next token refresh / app start.
     }
@@ -91,7 +104,12 @@ class PushNotificationService {
     if (!isAvailable) return;
     try {
       final token = await FirebaseMessaging.instance.getToken();
-      if (token != null) await _employeeRepo.unregisterFcmToken(token);
+      if (token == null) return;
+      if (_onEmployeeRecord) {
+        await _employeeRepo.unregisterFcmToken(token);
+      } else {
+        await _authRepo.unregisterUserFcmToken(token);
+      }
     } catch (_) {
       // Best-effort on logout too.
     }

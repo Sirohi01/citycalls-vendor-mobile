@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/job_models.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_images.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../widgets/job_card.dart';
 import '../widgets/state_views.dart';
@@ -121,6 +122,10 @@ class _MyJobsScreenState extends ConsumerState<MyJobsScreen> {
                           icon: _filter == _Filter.all
                               ? Icons.task_alt_rounded
                               : Icons.filter_list_off_rounded,
+                          image: _filter == _Filter.all
+                              ? AppImages.mascotServices
+                              : null,
+                          imageHeight: 190,
                           title: _filter == _Filter.all
                               ? "You're all caught up"
                               : 'Nothing here',

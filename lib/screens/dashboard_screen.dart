@@ -11,6 +11,8 @@ import '../providers/job_providers.dart';
 import '../providers/notification_providers.dart';
 import '../providers/sync_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/partner_banner_carousel.dart';
+import '../theme/app_images.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../widgets/hero_header.dart';
 import '../widgets/job_card.dart';
@@ -95,6 +97,10 @@ class DashboardScreen extends ConsumerWidget {
                 todayTotal: todayTotal,
               ),
               const _SyncBanner(),
+              const Padding(
+                padding: EdgeInsets.only(top: 20),
+                child: PartnerBannerCarousel(),
+              ),
               if (jobs.isLoading && !jobs.hasValue)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 48),
@@ -132,6 +138,8 @@ class DashboardScreen extends ConsumerWidget {
                           padding: EdgeInsets.symmetric(vertical: 12),
                           child: UiEmptyState(
                             icon: Icons.task_alt_rounded,
+                            image: AppImages.mascotServices,
+                            imageHeight: 170,
                             title: "You're all caught up",
                             message:
                                 'New jobs assigned to you will show up here.',
@@ -227,15 +235,28 @@ class _Header extends ConsumerWidget {
     final progress = todayTotal == 0 ? 0.0 : done / todayTotal;
 
     return HeroHeader(
+      backgroundImage: AppImages.appliancesDark,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Wordmark(size: 24),
+              // Shrinks rather than overflows on large font settings.
+              const Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Wordmark(size: 24),
+                      SizedBox(width: 8),
+                      HeroTag('FIELD'),
+                    ],
+                  ),
+                ),
+              ),
               const SizedBox(width: 8),
-              const HeroTag('FIELD'),
-              const Spacer(),
               HeroIconButton(
                 icon: Icons.notifications_none_rounded,
                 tooltip: 'Notifications',
@@ -677,8 +698,8 @@ class _SyncBanner extends ConsumerWidget {
                 children: [
                   Text(
                     rejected > 0
-                        ? '$rejected action(s) need your attention'
-                        : '${queued.length} action(s) waiting to sync',
+                        ? '$rejected ${rejected == 1 ? 'update needs' : 'updates need'} your attention'
+                        : '${queued.length} ${queued.length == 1 ? 'update is' : 'updates are'} waiting to sync',
                     style: const TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w800,

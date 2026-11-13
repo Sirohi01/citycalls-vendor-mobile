@@ -4,6 +4,7 @@ import '../models/job_models.dart';
 import '../models/visit_models.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_images.dart';
 import '../widgets/form_kit.dart';
 import '../widgets/state_views.dart';
 import '../widgets/ui_kit.dart';
@@ -112,8 +113,11 @@ class _RescheduleScreenState extends ConsumerState<RescheduleScreen> {
                   child: UiCard(
                     child: Row(
                       children: [
-                        const UiIconTile(
-                            icon: Icons.event_rounded, color: AppColors.info),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Image.asset(AppImages.schedule,
+                              width: 64, height: 64, fit: BoxFit.cover),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -150,7 +154,10 @@ class _RescheduleScreenState extends ConsumerState<RescheduleScreen> {
                   child: UiSectionLabel('Pick a new day'),
                 ),
                 SizedBox(
-                  height: 84,
+                  // Taller on large font settings.
+                  height: 84 *
+                      (MediaQuery.textScalerOf(context).scale(16) / 16)
+                          .clamp(1.0, 1.8),
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -301,7 +308,8 @@ class _DayChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: 62,
+        width: 62 *
+            (MediaQuery.textScalerOf(context).scale(16) / 16).clamp(1.0, 1.5),
         decoration: BoxDecoration(
           color: selected ? AppColors.ink : Colors.white,
           borderRadius: BorderRadius.circular(18),

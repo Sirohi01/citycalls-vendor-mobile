@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/job_models.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_images.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../widgets/job_card.dart';
 import '../widgets/state_views.dart';
@@ -40,6 +41,8 @@ class JobHistoryScreen extends ConsumerWidget {
                         SizedBox(height: 80),
                         UiEmptyState(
                           icon: Icons.history_rounded,
+                          image: AppImages.trustedShield,
+                          imageHeight: 180,
                           title: 'No completed jobs yet',
                           message: 'Jobs you finish will be listed here.',
                         ),

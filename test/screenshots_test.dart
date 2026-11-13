@@ -5,6 +5,10 @@
 //
 //   flutter test test/screenshots_test.dart --update-goldens
 //
+// Without --update-goldens the shots are skipped: they show clock-relative
+// text ("Today", "Due 3:30 PM"), so comparing against old PNGs would fail
+// for reasons that aren't bugs.
+//
 // The PNGs are git-ignored; Roboto/Material Icons are loaded from the Flutter
 // SDK so text renders as on Android rather than as test-font boxes.
 import 'dart:io';
@@ -304,7 +308,7 @@ void main() {
     bool otpSent = false,
     Future<void> Function(WidgetTester tester)? setup,
   }) {
-    testWidgets(name, (tester) async {
+    testWidgets(name, skip: !autoUpdateGoldenFiles, (tester) async {
       // flutter_test draws shadows as hard bands by default; render them
       // the way a device does.
       debugDisableShadows = false;
@@ -316,6 +320,14 @@ void main() {
         overrides: [..._overrides(role: role, otpSent: otpSent), ...extra],
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
+          // TEXT_SCALE=1.3 renders as on a phone with large font settings.
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(double.tryParse(
+                        Platform.environment['TEXT_SCALE'] ?? '') ??
+                    1.0)),
+            child: child!,
+          ),
           theme: AppTheme.light(),
           home: screen,
         ),
@@ -327,6 +339,13 @@ void main() {
         }
       });
       await tester.pump(const Duration(milliseconds: 1200));
+      // Images that appear only once data loads (empty states) decode too.
+      await tester.runAsync(() async {
+        for (final element in find.byType(Image).evaluate()) {
+          await precacheImage((element.widget as Image).image, element);
+        }
+      });
+      await tester.pump(const Duration(milliseconds: 300));
       if (setup != null) await setup(tester);
       await tester.pump(const Duration(milliseconds: 400));
 
@@ -506,6 +525,11 @@ void main() {
       });
   shot('29_job_customer_na', const JobDetailScreen(jobId: 'job41'),
       extra: detail('CUSTOMER_UNAVAILABLE'));
+
+  shot('32_my_jobs_empty', withNav(const MyJobsScreen(), 1),
+      extra: [allJobsProvider.overrideWith((ref) => const <JobSummary>[])]);
+  shot('33_history_empty', withNav(const JobHistoryScreen(), 2),
+      extra: [allJobsProvider.overrideWith((ref) => const <JobSummary>[])]);
 
   // Real OSM tiles for the area, downloaded once into a local folder
   // (OSM_TILES env var), so the map renders as on a phone. Skipped when absent.

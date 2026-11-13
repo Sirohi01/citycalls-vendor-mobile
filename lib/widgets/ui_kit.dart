@@ -272,6 +272,10 @@ class UiEmptyState extends StatelessWidget {
   final String? message;
   final String? actionLabel;
   final VoidCallback? onAction;
+  // Optional illustration (lib/theme/app_images.dart) shown instead of the
+  // icon badge.
+  final String? image;
+  final double imageHeight;
   const UiEmptyState({
     super.key,
     required this.icon,
@@ -279,6 +283,8 @@ class UiEmptyState extends StatelessWidget {
     this.message,
     this.actionLabel,
     this.onAction,
+    this.image,
+    this.imageHeight = 150,
   });
 
   @override
@@ -289,6 +295,9 @@ class UiEmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (image != null)
+              Image.asset(image!, height: imageHeight, fit: BoxFit.contain)
+            else
             Container(
               width: 84,
               height: 84,

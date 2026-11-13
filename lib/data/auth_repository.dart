@@ -70,6 +70,17 @@ class AuthRepository {
     return AuthUser.fromMeJson(res.data['data'] as Map<String, dynamic>);
   }
 
+  // Push token for vendor staff (VENDOR_OWNER/MANAGER/TECHNICIAN), who have
+  // no Employee record — stored on the User instead (citycalls-api
+  // auth.routes.ts). Employees keep using /employees/me/fcm-token.
+  Future<void> registerUserFcmToken(String token) async {
+    await _client.dio.post('/auth/me/fcm-token', data: {'token': token});
+  }
+
+  Future<void> unregisterUserFcmToken(String token) async {
+    await _client.dio.delete('/auth/me/fcm-token', data: {'token': token});
+  }
+
   // Revokes the refresh token server-side (POST /auth/logout) before
   // clearing it here, so a lost or shared phone can't keep the session
   // alive. Best-effort: offline, the local logout still happens.

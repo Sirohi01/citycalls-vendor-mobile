@@ -52,15 +52,15 @@ List<AppNavItemData> vendorNavItems({required bool showEarnings}) => [
             label: 'Earnings'),
     ];
 
-/// Space a tab screen must leave at the bottom of its scroll content so the
-/// last item isn't hidden behind the floating bar.
-double bottomNavClearance(BuildContext context) =>
-    MediaQuery.of(context).padding.bottom + 110;
+/// Space a tab screen leaves at the bottom of its scroll content. The bar is
+/// docked below the content (no `extendBody`), so this is just breathing room.
+double bottomNavClearance(BuildContext context) => 28;
 
-// Floating dark bottom bar shared by MainShell and VendorOwnerShell. Every
-// tab shows its icon with its name underneath; the selected tab gets a lime
-// pill behind the icon and a lime, bold label. Shells use `extendBody: true`
-// so content scrolls underneath it.
+// Bottom bar shared by MainShell and VendorOwnerShell, in the customer app's
+// style: a white bar docked to the bottom edge with rounded top corners.
+// Every tab shows its icon with its name underneath. The selected tab gets a
+// soft green pill behind a filled green icon and a bold dark label, so it's
+// obvious where you are even at a glance in sunlight.
 class AppBottomNav extends StatelessWidget {
   final List<AppNavItemData> items;
   final int currentIndex;
@@ -74,27 +74,21 @@ class AppBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).padding.bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(14, 0, 14, bottom > 0 ? bottom : 12),
-      child: Container(
-        height: 74,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF111A14), AppColors.heroDark],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+        border: const Border(top: BorderSide(color: AppColors.line)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.ink.withValues(alpha: 0.08),
+            blurRadius: 24,
+            offset: const Offset(0, -6),
           ),
-          borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.heroDark.withValues(alpha: 0.35),
-              blurRadius: 30,
-              offset: const Offset(0, 14),
-            ),
-          ],
-        ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(8, 8, 8, bottom > 0 ? bottom : 10),
         child: Row(
           children: [
             for (var i = 0; i < items.length; i++)
@@ -121,7 +115,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final idle = Colors.white.withValues(alpha: 0.62);
+    const idle = AppColors.slate500;
     return Semantics(
       selected: selected,
       button: true,
@@ -130,69 +124,73 @@ class _NavItem extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
-        splashColor: AppColors.lime400.withValues(alpha: 0.12),
+        splashColor: AppColors.green.withValues(alpha: 0.10),
         highlightColor: Colors.transparent,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 240),
-                  curve: Curves.easeOutCubic,
-                  width: selected ? 56 : 40,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: selected ? AppColors.lime400 : Colors.transparent,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    selected ? data.activeIcon : data.icon,
-                    size: 23,
-                    color: selected ? AppColors.heroDark : idle,
-                  ),
-                ),
-                if (data.badge > 0)
-                  Positioned(
-                    right: selected ? 2 : 4,
-                    top: -5,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4.5, vertical: 1),
-                      constraints: const BoxConstraints(minWidth: 18),
-                      decoration: BoxDecoration(
-                        color: AppColors.urgent,
-                        borderRadius: BorderRadius.circular(10),
-                        border:
-                            Border.all(color: AppColors.heroDark, width: 1.8),
-                      ),
-                      child: Text(
-                        data.badge > 9 ? '9+' : '${data.badge}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800),
-                      ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutCubic,
+                    width: selected ? 60 : 44,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.green.withValues(alpha: 0.13)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(17),
+                    ),
+                    child: Icon(
+                      selected ? data.activeIcon : data.icon,
+                      size: 24,
+                      color: selected ? AppColors.green : idle,
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            Text(
-              data.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11.5,
-                letterSpacing: 0.1,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                color: selected ? AppColors.lime400 : idle,
+                  if (data.badge > 0)
+                    Positioned(
+                      right: selected ? 6 : 2,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4.5, vertical: 1),
+                        constraints: const BoxConstraints(minWidth: 18),
+                        decoration: BoxDecoration(
+                          color: AppColors.urgent,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: Text(
+                          data.badge > 9 ? '9+' : '${data.badge}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                data.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  letterSpacing: 0.1,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  color: selected ? AppColors.ink : idle,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

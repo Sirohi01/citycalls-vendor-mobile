@@ -245,6 +245,18 @@ void main() {
     });
   });
 
+  group('Push token for vendor staff (auth.routes.ts /me/fcm-token)', () {
+    test('register and unregister send {token} to /auth/me/fcm-token', () async {
+      final backend = FakeBackend((r) => r.path == '/auth/me/fcm-token' ? FakeResponse.ok(null) : null);
+      final repo = AuthRepository(_client(backend));
+      await repo.registerUserFcmToken('tok-1');
+      await repo.unregisterUserFcmToken('tok-1');
+      expect(backend.requests.map((r) => '${r.method} ${r.path}'),
+          ['POST /auth/me/fcm-token', 'DELETE /auth/me/fcm-token']);
+      expect(backend.requests.every((r) => (r.body as Map)['token'] == 'tok-1'), isTrue);
+    });
+  });
+
   group('Offline sync queue → POST /service-requests/:id/sync-batch', () {
     late LocalDatabase db;
     late SyncRepository repo;

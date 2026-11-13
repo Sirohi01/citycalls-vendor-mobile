@@ -69,8 +69,7 @@ class _MainShellState extends ConsumerState<MainShell>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncEngineProvider).syncAll();
       final role = ref.read(authProvider).user?.role;
-      ref.read(pushNotificationServiceProvider).initialize(
-          canRegisterToken: role == 'EMPLOYEE' || role == 'TECHNICIAN');
+      ref.read(pushNotificationServiceProvider).initialize(role: role);
       _applyPendingTab();
     });
   }
@@ -161,7 +160,7 @@ class _MainShellState extends ConsumerState<MainShell>
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.dark,
-        systemNavigationBarColor: AppColors.page,
+        systemNavigationBarColor: Colors.white,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: PopScope(
@@ -170,8 +169,6 @@ class _MainShellState extends ConsumerState<MainShell>
           if (!didPop) _handleBack();
         },
         child: Scaffold(
-          // Content scrolls underneath the floating bottom bar.
-          extendBody: true,
           body: IndexedStack(index: _index, children: _tabs),
           bottomNavigationBar: AppBottomNav(
             currentIndex: _index,

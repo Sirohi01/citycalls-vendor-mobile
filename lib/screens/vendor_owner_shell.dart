@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_providers.dart';
+import '../providers/push_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../widgets/ui_kit.dart';
@@ -21,6 +22,17 @@ class VendorOwnerShell extends ConsumerStatefulWidget {
 
 class _VendorOwnerShellState extends ConsumerState<VendorOwnerShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Owners/managers get the "new job assigned to your company" push too.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref
+          .read(pushNotificationServiceProvider)
+          .initialize(role: ref.read(authProvider).user?.role);
+    });
+  }
 
   Future<void> _logout() async {
     final confirmed = await showDialog<bool>(
@@ -43,6 +55,8 @@ class _VendorOwnerShellState extends ConsumerState<VendorOwnerShell> {
       ),
     );
     if (confirmed != true) return;
+    // Otherwise this phone keeps getting the company's job alerts after logout.
+    await ref.read(pushNotificationServiceProvider).unregisterCurrentToken();
     await ref.read(authProvider.notifier).logout();
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
@@ -68,7 +82,7 @@ class _VendorOwnerShellState extends ConsumerState<VendorOwnerShell> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        systemNavigationBarColor: AppColors.page,
+        systemNavigationBarColor: Colors.white,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: PopScope(
@@ -77,8 +91,6 @@ class _VendorOwnerShellState extends ConsumerState<VendorOwnerShell> {
           if (!didPop) setState(() => _index = 0);
         },
         child: Scaffold(
-          // Content scrolls underneath the floating bottom bar.
-          extendBody: true,
           body: IndexedStack(index: _index, children: tabs),
           bottomNavigationBar: AppBottomNav(
             currentIndex: _index,

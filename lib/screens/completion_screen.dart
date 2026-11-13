@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import '../data/job_repository.dart';
 import '../providers/job_providers.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_images.dart';
 import '../widgets/form_kit.dart';
 import '../widgets/state_views.dart';
 import '../widgets/ui_kit.dart';
@@ -150,8 +151,35 @@ class _CompletionScreenState extends ConsumerState<CompletionScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          const InfoNote(
-              'Get the customer to confirm the work is done — by OTP or by signing on your phone.'),
+          UiCard(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Row(
+              children: [
+                Image.asset(AppImages.trustedShield,
+                    width: 86, height: 86, fit: BoxFit.contain),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Almost done!',
+                          style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.ink)),
+                      SizedBox(height: 4),
+                      Text(
+                          'Get the customer to confirm the work — by OTP or by signing on your phone.',
+                          style: TextStyle(
+                              fontSize: 13,
+                              height: 1.4,
+                              color: AppColors.muted)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 20),
           InlineError(_error),
           const UiSectionLabel('Option 1 — Customer OTP'),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../theme/app_images.dart';
 import '../theme/app_theme.dart';
 
 // Shared chrome for the login flow — black background, the CityCalls
@@ -76,6 +77,37 @@ class _AuthBackgroundState extends State<AuthBackground>
                 opacity: 0.55,
                 child: Image.asset('assets/login/splace.png',
                     fit: BoxFit.fitWidth),
+              ),
+            ),
+          ),
+          // CityCalls field-service photo across the top, fading to black
+          // so the logo and form stay readable.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: size.height * 0.46,
+            child: IgnorePointer(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(AppImages.fieldService,
+                      fit: BoxFit.cover, alignment: Alignment.topCenter),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: [0, 0.45, 1],
+                        colors: [
+                          Color(0x99000000),
+                          Color(0xCC000000),
+                          Colors.black,
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

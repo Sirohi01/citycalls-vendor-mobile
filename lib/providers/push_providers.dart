@@ -2,11 +2,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/push_notification_service.dart';
+import 'auth_providers.dart';
 import 'employee_providers.dart';
 
 final pushNotificationServiceProvider =
     Provider<PushNotificationService>((ref) {
-  return PushNotificationService(ref.watch(employeeRepositoryProvider));
+  return PushNotificationService(
+      ref.watch(employeeRepositoryProvider), ref.watch(authRepositoryProvider));
 });
 
 // Foreground messages don't show a system notification banner on their own

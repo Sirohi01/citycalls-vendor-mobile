@@ -5,6 +5,7 @@ import '../models/job_models.dart';
 import '../providers/notification_providers.dart';
 import '../providers/vendor_management_providers.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_images.dart';
 import '../widgets/app_bottom_nav.dart';
 import 'package:flutter/services.dart';
 import '../widgets/hero_header.dart';
@@ -86,27 +87,39 @@ class _Header extends StatelessWidget {
         data: (v) => (v as dynamic).companyName as String?);
 
     return HeroHeader(
+      backgroundImage: AppImages.fieldService,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Wordmark(size: 24),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.heroLime.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Wordmark(size: 24),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.heroLime.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text('PARTNER',
+                            style: TextStyle(
+                                color: AppColors.heroLime,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.2)),
+                      ),
+                    ],
+                  ),
                 ),
-                child: const Text('PARTNER',
-                    style: TextStyle(
-                        color: AppColors.heroLime,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2)),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               // Owners get job notifications too (GET /notifications needs
               // no permission) — same centre as the technician app.
               Consumer(
@@ -393,7 +406,28 @@ class _WeekTrend extends StatelessWidget {
                     fontSize: 12.5,
                     color: strongSecondaryTextColor(context))),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                    text: '${counts.fold<int>(0, (a, b) => a + b)}',
+                    style: const TextStyle(
+                        fontSize: 26,
+                        height: 1,
+                        letterSpacing: -0.6,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.ink)),
+                TextSpan(
+                    text: '  jobs · 7 days',
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: secondaryTextColor(context))),
+              ]),
+            ),
+          ),
           const Spacer(),
           SizedBox(
             height: 108,
@@ -440,6 +474,13 @@ class _WeekTrend extends StatelessWidget {
                             : AppColors.green.withValues(alpha: 0.35),
                         width: 14,
                         borderRadius: BorderRadius.circular(4),
+                        // Faint full-height track so quiet days still read
+                        // as a day, not as empty space.
+                        backDrawRodData: BackgroundBarChartRodData(
+                          show: true,
+                          toY: maxY < 4 ? 4 : maxY + 1,
+                          color: AppColors.slate100,
+                        ),
                       ),
                     ]),
                 ],
